@@ -131,6 +131,7 @@ else:
             with tabs[3]: empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera)
         if es_admin:
             with tabs[4]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
+            # CORRECCIÓN: Pasar guardar_global aquí también
             with tabs[5]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
     except IndexError:
         pass
