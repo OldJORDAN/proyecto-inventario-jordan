@@ -19,7 +19,7 @@ def aplicar_diseno_jordan():
 # --- 3. CARGA DE DATOS BLINDADA ---
 def cargar_datos(pestaña):
     try:
-        # Forzamos lectura como texto para evitar errores de formato en Claves y Usuarios
+        # Forzamos lectura como texto inicialmente para seguridad
         df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
         
         # Normalización de seguridad para la pestaña Usuarios
@@ -28,15 +28,20 @@ def cargar_datos(pestaña):
             if 'Estado_Licencia' not in df.columns:
                 df['Estado_Licencia'] = 'Activo'
             
-        # Normalización de Stock para que funcionen los cálculos matemáticos
+        # --- PARCHE CRÍTICO PARA MATEMÁTICAS ---
+        # Convertimos Stock en Inventario a número
         if pestaña == "Inventario" and "Stock" in df.columns:
             df['Stock'] = pd.to_numeric(df['Stock'], errors='coerce').fillna(0).astype(int)
+            
+        # Convertimos Cantidad en Movimientos a número (ESTO ARREGLA TU ERROR)
+        if pestaña == "Movimientos" and "Cantidad" in df.columns:
+            df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(0)
             
         return df
     except:
         return pd.DataFrame()
 
-# --- 4. FUNCIÓN DE GUARDADO GLOBAL (Escritura en Disco) ---
+# --- 4. FUNCIÓN DE GUARDADO GLOBAL ---
 def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
     try:
         with pd.ExcelWriter("database.xlsx", engine="openpyxl") as writer:
@@ -63,47 +68,30 @@ if not st.session_state['conectado']:
     
     if st.button("🚀 Ingresar al Sistema"):
         u_l = u_in.strip().lower()
-        
-        # PRIORIDAD 1: Llave Maestra (Tú como Desarrollador)
         es_m, rol_m = seguridad.verificar_clave(u_l, p_in, None)
         if es_m and rol_m == "Desarrollador":
             st.session_state.update({'conectado': True, 'user': u_l, 'nombre': "Jordan (Master)", 'rol': "Desarrollador"})
             st.rerun()
-        
-        # PRIORIDAD 2: Usuarios del Excel
         else:
             df_u_login = cargar_datos("Usuarios")
             if not df_u_login.empty:
                 row = df_u_login[df_u_login['Usuario'] == u_l]
-                
                 if not row.empty:
-                    # VALIDACIÓN DE ESTADO DE LICENCIA
                     estado_lic = str(row.iloc[0].get('Estado_Licencia', 'Activo'))
-                    
                     if estado_lic == "Inactivo":
-                        st.error("🚫 **LICENCIA DESHABILITADA:** Contacte al Desarrollador para activar su acceso.")
+                        st.error("🚫 **LICENCIA DESHABILITADA:** Contacte al Desarrollador.")
                     else:
                         clave_excel = str(row.iloc[0]['Clave'])
                         valido, _ = seguridad.verificar_clave(u_l, p_in, clave_excel)
-                        
                         if valido:
-                            st.session_state.update({
-                                'conectado': True, 
-                                'user': u_l, 
-                                'nombre': row.iloc[0]['Nombre'], 
-                                'rol': row.iloc[0]['Rol']
-                            })
+                            st.session_state.update({'conectado': True, 'user': u_l, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol']})
                             st.rerun()
-                        else:
-                            st.error("❌ Contraseña incorrecta")
-                else:
-                    st.error("❌ Usuario no registrado")
-            else:
-                st.error("❌ Error al conectar con la base de datos")
+                        else: st.error("❌ Contraseña incorrecta")
+                else: st.error("❌ Usuario no registrado")
+            else: st.error("❌ Error al conectar con la base de datos")
 
-# --- 6. PANEL PRINCIPAL (USUARIO CONECTADO) ---
 else:
-    # Carga de todos los datos necesarios
+    # CARGA DE DATOS
     df_inv = cargar_datos("Inventario")
     df_mov = cargar_datos("Movimientos")
     df_u = cargar_datos("Usuarios")
@@ -111,38 +99,27 @@ else:
     df_lug = cargar_datos("Lugares")
     df_papelera = cargar_datos("Papelera")
 
-    # Sidebar con info del usuario
     st.sidebar.title(f"👤 {st.session_state['nombre']}")
     st.sidebar.info(f"Rol: **{st.session_state['rol']}**")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state['conectado'] = False
         st.rerun()
 
-    # --- DEFINICIÓN DE PERMISOS POR ROL ---
     rol = st.session_state['rol']
-    
     es_poder_total = rol in ["Desarrollador", "Administrador"]
     es_mando_medio = rol in ["Desarrollador", "Administrador", "Supervisor", "Maestro de Obra"]
     
-    # Pestañas básicas para todos (Soldador, Cortador, Amolador, Pintor, Ayudante)
     lista_tabs = ["📦 Inventario", "🔄 Movimientos"]
-    
-    if es_mando_medio:
-        lista_tabs += ["🛠️ Mantenimiento", "🏢 Empresas"]
-    
-    if es_poder_total:
-        lista_tabs += ["👤 Usuarios", "📜 Historial"]
+    if es_mando_medio: lista_tabs += ["🛠️ Mantenimiento", "🏢 Empresas"]
+    if es_poder_total: lista_tabs += ["👤 Usuarios", "📜 Historial"]
 
-    # Crear la interfaz de pestañas
     tabs = st.tabs(lista_tabs)
 
-    # Contenido de las pestañas
     with tabs[0]: 
         inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     with tabs[1]: 
         movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
     
-    # Control de errores por si el rol no tiene acceso a las pestañas superiores
     try:
         if es_mando_medio:
             with tabs[2]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
@@ -150,5 +127,4 @@ else:
         if es_poder_total:
             with tabs[4]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
             with tabs[5]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
-    except IndexError:
-        pass
+    except IndexError: pass
