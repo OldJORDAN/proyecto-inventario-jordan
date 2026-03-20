@@ -1,33 +1,27 @@
 import streamlit as st
-import re
 
 def verificar_clave(clave_ingresada, clave_real):
     """
-    Compara la clave que escribe el usuario contra la que está guardada en el Excel.
-    Se asegura de que ambas sean tratadas como texto para evitar errores de tipo.
+    Compara la clave ingresada contra la del Excel.
+    Forzamos a que ambas sean texto y quitamos espacios.
     """
     try:
-        # Convertimos ambos a string y quitamos espacios en blanco a los lados
+        # Convertimos a string y quitamos espacios invisibles
         ingresada = str(clave_ingresada).strip()
         real = str(clave_real).strip()
         
-        # Retorna True si son iguales, False si no
+        # Si en Excel el 1234 se guardó como "1234.0", esto lo limpia
+        if real.endswith('.0'):
+            real = real[:-2]
+            
         return ingresada == real
-    except Exception:
-        # Si algo falla en la conversión, por seguridad no deja entrar
+    except:
         return False
 
 def limpiar_texto_seguro(texto):
     """
-    Función Anti-Hacker: 
-    Elimina cualquier símbolo que no sea letra o número.
-    Evita inyecciones de código o scripts maliciosos.
+    Solo quita espacios a los lados para no dañar el usuario real.
     """
     if not texto:
         return ""
-    
-    # Esta expresión regular solo deja pasar letras (a-z, A-Z) y números (0-9)
-    # Borra puntos, comas, comillas, paréntesis, etc.
-    texto_limpio = re.sub(r'[^a-zA-Z0-9]', '', str(texto))
-    
-    return texto_limpio.lower() # Lo devolvemos en minúsculas para estandarizar
+    return str(texto).strip()
