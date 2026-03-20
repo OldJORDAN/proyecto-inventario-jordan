@@ -30,18 +30,30 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                 st.error("🚫 Límite alcanzado.")
             else:
                 with st.form("nuevo_u"):
-                    n = st.text_input("Nombre y Apellido")
-                    u = st.text_input("ID de Acceso").lower().strip()
+                    n = st.text_input("Nombre Completo")
+                    u = st.text_input("Usuario (ID)").lower().strip()
                     c = st.text_input("Clave", type="password")
-                    r = st.selectbox("Rol", ["Operador", "Supervisor", "Administrador", "Maestro de Obra"])
-                    a = st.selectbox("Área de Trabajo", ["Oficina", "Obra", "Logística", "Externo"])
+                    r = st.selectbox("Rol", ["Operador", "Supervisor", "Administrador", "Maestro de Obra", "Desarrollador"])
+                    # --- USAMOS TU COLUMNA: Tipo_Personal ---
+                    tp = st.selectbox("Tipo de Personal", ["Oficina", "Obra", "Externo"])
                     
                     if st.form_submit_button("Guardar Registro"):
                         if n and u and c:
                             if not df_u.empty and u in df_u['Usuario'].astype(str).values:
                                 st.error("Este usuario ya existe.")
                             else:
-                                nuevo = {"Nombre": n, "Usuario": u, "Clave": c, "Rol": r, "Area": a}
+                                # Creamos el Display como lo tienes en tu Excel
+                                display_val = f"{n} ({r})"
+                                
+                                nuevo = {
+                                    "Nombre": n, 
+                                    "Usuario": u, 
+                                    "Clave": c, 
+                                    "Rol": r, 
+                                    "Tipo_Personal": tp,
+                                    "Display": display_val
+                                }
+                                
                                 df_u = pd.concat([df_u, pd.DataFrame([nuevo])], ignore_index=True)
                                 guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
                                 st.success(f"¡{n} registrado!")
@@ -52,6 +64,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     with col_del:
         with st.expander("🗑️ Eliminar Personal"):
             if not df_u.empty:
+                # Evitamos borrar al admin maestro
                 lista_usuarios = df_u[df_u['Usuario'] != 'jordan']['Usuario'].tolist()
                 if lista_usuarios:
                     u_sel = st.selectbox("Usuario a eliminar:", lista_usuarios)
@@ -69,22 +82,25 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
     
-    # --- 4. TABLA DE CONTROL (EL BLINDAJE ESTÁ AQUÍ) ---
+    # --- 4. TABLA DE CONTROL (AJUSTADA A TU EXCEL) ---
     st.subheader("📋 Lista de Personal Registrado")
     
-    # Verificamos qué columnas existen realmente para que no salga el KeyError
+    # Verificamos qué columnas existen realmente en tu Excel de la foto
     columnas_disponibles = df_u.columns.tolist()
-    columnas_a_mostrar = [c for c in ['Nombre', 'Usuario', 'Rol', 'Area'] if c in columnas_disponibles]
     
-    if 'Area' in columnas_disponibles:
-        filtro_area = st.multiselect("Filtrar por Área:", ["Oficina", "Obra", "Logística", "Externo"], default=["Oficina", "Obra"])
-        df_filtrado = df_u[df_u['Area'].isin(filtro_area)] if filtro_area else df_u
+    # Columnas que queremos mostrar (las tuyas)
+    columnas_base = [c for c in ['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Display'] if c in columnas_disponibles]
+    
+    # Filtro dinámico por Tipo_Personal
+    if 'Tipo_Personal' in columnas_disponibles:
+        tipos = df_u['Tipo_Personal'].unique().tolist()
+        filtro_tp = st.multiselect("Filtrar por Tipo de Personal:", tipos, default=tipos)
+        df_filtrado = df_u[df_u['Tipo_Personal'].isin(filtro_tp)] if filtro_tp else df_u
     else:
-        st.warning("⚠️ La columna 'Area' no se encontró en el Excel. Se mostrarán todos los registros.")
         df_filtrado = df_u
 
     if st.toggle("Ver Claves (Modo Admin)"):
-        columnas_con_clave = [c for c in ['Nombre', 'Usuario', 'Clave', 'Rol', 'Area'] if c in columnas_disponibles]
-        st.dataframe(df_filtrado[columnas_con_clave], use_container_width=True)
+        columnas_admin = [c for c in ['Nombre', 'Usuario', 'Clave', 'Rol', 'Tipo_Personal'] if c in columnas_disponibles]
+        st.dataframe(df_filtrado[columnas_admin], use_container_width=True)
     else:
-        st.dataframe(df_filtrado[columnas_a_mostrar], use_container_width=True)
+        st.dataframe(df_filtrado[columnas_base], use_container_width=True)
