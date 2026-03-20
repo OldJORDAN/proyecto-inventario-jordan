@@ -1,48 +1,33 @@
 import streamlit as st
-import pandas as pd
+import re
 
-def verificar_clave(usuario_ingresado, clave_ingresada, df_usuarios):
+def verificar_clave(clave_ingresada, clave_real):
     """
-    Función que valida las credenciales y cuenta los intentos.
+    Compara la clave que escribe el usuario contra la que está guardada en el Excel.
+    Se asegura de que ambas sean tratadas como texto para evitar errores de tipo.
     """
-    # 1. INICIALIZAR CONTADOR DE SEGURIDAD
-    if 'intentos' not in st.session_state:
-        st.session_state.intentos = 0
-    
-    # 2. VERIFICAR SI YA ESTÁ BLOQUEADO
-    if st.session_state.intentos >= 3:
-        st.error("🚫 **ACCESO BLOQUEADO:** Has fallado 3 veces. Por seguridad, el sistema se ha cerrado. Contacta a Jordan Damian.")
-        return None, None
-
-    # 3. PROCESO DE VALIDACIÓN
-    # Buscamos al usuario en el DataFrame (ignorando mayúsculas/minúsculas para evitar errores)
-    usuario_encontrado = df_usuarios[df_usuarios['Usuario'].str.lower() == usuario_ingresado.lower()]
-
-    if not usuario_encontrado.empty:
-        # Comparamos la clave (aquí puedes usar bcrypt si ya lo tienes implementado)
-        clave_real = str(usuario_encontrado.iloc[0]['Clave'])
+    try:
+        # Convertimos ambos a string y quitamos espacios en blanco a los lados
+        ingresada = str(clave_ingresada).strip()
+        real = str(clave_real).strip()
         
-        if str(clave_ingresada) == clave_real:
-            # ¡ÉXITO! Reiniciamos intentos y devolvemos datos
-            st.session_state.intentos = 0
-            return True, usuario_encontrado.iloc[0]['Rol']
-        else:
-            # CLAVE ERRÓNEA
-            st.session_state.intentos += 1
-            intentos_restantes = 3 - st.session_state.intentos
-            st.warning(f"❌ Clave incorrecta. Te quedan **{intentos_restantes}** intentos.")
-            return False, None
-    else:
-        # USUARIO NO EXISTE
-        st.session_state.intentos += 1
-        intentos_restantes = 3 - st.session_state.intentos
-        st.error(f"👤 El usuario '{usuario_ingresado}' no existe. Te quedan **{intentos_restantes}** intentos.")
-        return False, None
+        # Retorna True si son iguales, False si no
+        return ingresada == real
+    except Exception:
+        # Si algo falla en la conversión, por seguridad no deja entrar
+        return False
 
-def limpiar_texto(texto):
+def limpiar_texto_seguro(texto):
     """
-    Función 'Anti-Inyección': Quita símbolos raros que usan los hackers.
+    Función Anti-Hacker: 
+    Elimina cualquier símbolo que no sea letra o número.
+    Evita inyecciones de código o scripts maliciosos.
     """
-    import re
-    # Solo permite letras, números y espacios
-    return re.sub(r'[^a-zA-Z0-9 ]', '', texto)
+    if not texto:
+        return ""
+    
+    # Esta expresión regular solo deja pasar letras (a-z, A-Z) y números (0-9)
+    # Borra puntos, comas, comillas, paréntesis, etc.
+    texto_limpio = re.sub(r'[^a-zA-Z0-9]', '', str(texto))
+    
+    return texto_limpio.lower() # Lo devolvemos en minúsculas para estandarizar
