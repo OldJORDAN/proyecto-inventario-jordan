@@ -2,15 +2,15 @@ import streamlit as st
 
 def verificar_clave(clave_ingresada, clave_real):
     """
-    Compara la clave ingresada contra la del Excel.
-    Forzamos a que ambas sean texto y quitamos espacios.
+    Compara la clave forzando a que ambas sean strings limpios.
+    Maneja el error común de Excel que agrega '.0' a los números.
     """
     try:
-        # Convertimos a string y quitamos espacios invisibles
+        # Convertimos a string, quitamos espacios y aseguramos formato plano
         ingresada = str(clave_ingresada).strip()
         real = str(clave_real).strip()
         
-        # Si en Excel el 1234 se guardó como "1234.0", esto lo limpia
+        # Parche para el .0 de Excel (ejemplo: '1234.0' -> '1234')
         if real.endswith('.0'):
             real = real[:-2]
             
@@ -19,9 +19,6 @@ def verificar_clave(clave_ingresada, clave_real):
         return False
 
 def limpiar_texto_seguro(texto):
-    """
-    Solo quita espacios a los lados para no dañar el usuario real.
-    """
-    if not texto:
-        return ""
+    """Solo limpia espacios básicos para no corromper el usuario."""
+    if not texto: return ""
     return str(texto).strip()
