@@ -59,7 +59,7 @@ def mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera):
         st.subheader("🔍 Verificación de RUC")
         c1, c2 = st.columns([3, 1])
         with c1:
-            ruc_in = st.text_input("Ingrese RUC para validar:", max_chars=13, placeholder="Ej: 1790016919001 (Claro)")
+            ruc_in = st.text_input("Ingrese RUC para validar:", max_chars=13, placeholder="Ej: XXXXXXXXXXXXX (Claro)")
         with c2:
             st.write("##")
             if st.button("🚀 Validar RUC", use_container_width=True):
