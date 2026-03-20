@@ -5,7 +5,6 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Personal y Control de Licencias")
 
     # --- 1. BARRA DE LICENCIAS ---
-    # Limpieza de seguridad para que no cuente espacios vacíos
     df_u['Usuario'] = df_u['Usuario'].astype(str).str.strip()
     df_reales = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
     
@@ -51,62 +50,53 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (CON SALVAVIDAS) ---
+    # --- 3. PANEL DE CONTROL ---
     st.subheader("🛠️ Panel de Control")
-    
-    # SALVAVIDAS: Solo mostramos el panel si hay alguien a quien gestionar
     if not df_reales.empty:
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
             lista_us = df_reales['Usuario'].tolist()
             u_sel = st.selectbox("Usuario para gestionar:", lista_us)
-            
-            # Verificación extra para no romper el código
             user_match = df_u[df_u['Usuario'] == u_sel]
             if not user_match.empty:
                 idx = user_match.index[0]
                 est = df_u.at[idx, 'Estado_Licencia']
                 st.write(f"Estado: **{est}**")
-            else:
-                st.rerun()
+            else: st.rerun()
         
         with c2:
             st.write("Acceso")
             if st.button("🚫 Deshabilitar" if est=="Activo" else "✅ Habilitar", use_container_width=True):
                 df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est=="Activo" else "Activo"
-                guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                st.rerun()
+                guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
 
         with c3:
             st.write("Zona de Peligro")
-            if st.checkbox("Confirmar borrar", key="safe_del_check"):
+            if st.checkbox("Confirmar borrar", key="safe_del"):
                 if st.button("🗑️ Eliminar", type="primary", use_container_width=True):
                     df_u = df_u.drop(idx).reset_index(drop=True)
-                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                    st.rerun()
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
     else:
-        st.info("💡 No hay personal registrado para gestionar. Registra a alguien arriba.")
+        st.info("No hay personal para gestionar.")
 
     st.divider()
 
-    # --- 4. TABLA DE PERSONAL (SIEMPRE VISIBLE) ---
-    st.subheader("📋 Personal Registrado")
-    f_v = st.radio("Mostrar:", ["Todos", "Oficina", "Obra"], horizontal=True)
-    
-    # Volvemos a filtrar para la tabla por si hubo cambios
-    df_v = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
-    
-    if f_v == "Oficina": df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
-    elif f_v == "Obra": df_v = df_v[df_v['Tipo_Personal'] == 'Obra']
+    # --- 4. LA PESTAÑITA DESPLEGABLE (LO QUE PEDISTE) ---
+    with st.expander("📋 Ver Lista de Personal Registrado", expanded=False):
+        f_v = st.radio("Filtrar vista:", ["Todos", "Oficina", "Obra"], horizontal=True)
+        
+        df_v = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
+        if f_v == "Oficina": df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
+        elif f_v == "Obra": df_v = df_v[df_v['Tipo_Personal'] == 'Obra']
 
-    if not df_v.empty:
-        df_v['Estado_Licencia'] = df_v['Estado_Licencia'].replace('Inactivo', 'Deshabilitado')
-        st.dataframe(
-            df_v[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia']].style.applymap(
-                lambda x: f'color: {"#28a745" if x == "Activo" else "#dc3545"}; font-weight: bold', 
-                subset=['Estado_Licencia']
-            ), 
-            use_container_width=True
-        )
-    else:
-        st.warning("⚠️ No se encontraron registros para mostrar.")
+        if not df_v.empty:
+            df_v['Estado_Licencia'] = df_v['Estado_Licencia'].replace('Inactivo', 'Deshabilitado')
+            st.dataframe(
+                df_v[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia']].style.applymap(
+                    lambda x: f'color: {"#28a745" if x == "Activo" else "#dc3545"}; font-weight: bold', 
+                    subset=['Estado_Licencia']
+                ), 
+                use_container_width=True
+            )
+        else:
+            st.warning("No hay registros en esta categoría.")
