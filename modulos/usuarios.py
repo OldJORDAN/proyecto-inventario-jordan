@@ -4,8 +4,11 @@ import pandas as pd
 def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Personal y Control de Acceso")
 
-    # --- 1. BARRA DE LICENCIAS ---
-    usuarios_actuales = len(df_u)
+    # --- 1. BARRA DE LICENCIAS (SIN CONTAR AL DESARROLLADOR) ---
+    # Filtramos al usuario 'jordan' para el conteo
+    df_personal_real = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)]
+    usuarios_actuales = len(df_personal_real)
+    
     st.write(f"**Uso de Licencias:** {usuarios_actuales} de 50")
     st.progress(min(usuarios_actuales / 50, 1.0))
     st.divider()
@@ -41,18 +44,16 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (SOLO DESARROLLADOR) ---
+    # --- 3. PANEL DE CONTROL (SOLO PARA EL DESARROLLADOR) ---
     mi_rol = str(st.session_state.get('rol', '')).lower().strip()
     if "desarrollador" in mi_rol:
         st.subheader("🛠️ Panel de Control de Acceso")
         
-        # CORRECCIÓN AQUÍ: Usamos case=False para ignorar mayúsculas sin que explote
-        u_gest = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)]
-        
-        if not u_gest.empty:
+        # Usamos df_personal_real para que no te puedas seleccionar a ti mismo
+        if not df_personal_real.empty:
             c1, c2, c3 = st.columns(3)
             with c1:
-                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist())
+                u_sel = st.selectbox("Seleccione Usuario:", df_personal_real['Usuario'].tolist())
                 idx = df_u[df_u['Usuario'] == u_sel].index[0]
                 est = df_u.at[idx, 'Estado_Licencia']
                 st.write(f"Estado: **{est}**")
@@ -79,20 +80,20 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.subheader("📋 Personal Registrado")
     filtro = st.radio("Mostrar:", ["Todos", "Oficina", "Obra"], horizontal=True)
     
-    df_v = df_u.copy()
+    # IMPORTANTE: Aquí también usamos df_personal_real para que TÚ no salgas en la tabla
+    df_v = df_personal_real.copy()
+    
     if filtro == "Oficina":
         df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
     elif filtro == "Obra":
         df_v = df_v[df_v['Tipo_Personal'] == 'Obra']
 
-    # Cambiamos texto para la vista
     df_v['Estado_Licencia_Vista'] = df_v['Estado_Licencia'].replace('Inactivo', 'Deshabilitado')
     
     def style_estado(val):
         color = '#28a745' if val == 'Activo' else '#dc3545'
         return f'color: {color}; font-weight: bold'
 
-    # Mostramos la tabla con el estilo aplicado
     st.dataframe(
         df_v[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia_Vista']].style.applymap(
             style_estado, subset=['Estado_Licencia_Vista']
