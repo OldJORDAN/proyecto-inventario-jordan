@@ -4,27 +4,25 @@ import pandas as pd
 def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Personal y Control de Licencias")
 
-    # --- 1. BARRA DE LICENCIAS (SIN EL DESARROLLADOR) ---
-    # Filtramos al usuario 'jordan' para que no cuente ni aparezca
+    # --- 1. BARRA DE LICENCIAS ---
+    # No te contamos a ti (jordan) en el uso de licencias
     df_reales = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)]
-    usuarios_actuales = len(df_reales)
-    
-    st.write(f"**Uso de Licencias:** {usuarios_actuales} de 50")
-    st.progress(min(usuarios_actuales / 50, 1.0))
+    st.write(f"**Uso de Licencias:** {len(df_reales)} de 50")
+    st.progress(min(len(df_reales) / 50, 1.0))
     st.divider()
 
     # --- 2. REGISTRO (OFICINA / TALLER) ---
-    tab1, tab2 = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
-    with tab1:
-        with st.form("f_ofi_stable"):
+    t1, t2 = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
+    with t1:
+        with st.form("f_ofi_final"):
             n = st.text_input("Nombre Completo"); u = st.text_input("ID").lower().strip(); c = st.text_input("Clave", type="password")
             if st.form_submit_button("Registrar Oficina"):
                 if n and u:
                     nuevo = pd.DataFrame([{"Nombre":n,"Usuario":u,"Clave":c,"Rol":"Administrador","Tipo_Personal":"Oficina","Estado_Licencia":"Activo"}])
                     df_u = pd.concat([df_u, nuevo], ignore_index=True); guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
 
-    with tab2:
-        with st.form("f_obr_stable"):
+    with t2:
+        with st.form("f_obr_final"):
             n = st.text_input("Nombre Completo "); u = st.text_input("ID Taller").lower().strip(); c = st.text_input("Clave ", type="password")
             if st.form_submit_button("Registrar Taller"):
                 if n and u:
@@ -33,26 +31,42 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (PARA GESTIONAR A LOS DEMÁS) ---
+    # --- 3. PANEL DE CONTROL (CON BOTÓN ELIMINAR) ---
     st.subheader("🛠️ Panel de Control")
     if not df_reales.empty:
-        c1, c2 = st.columns([2, 1])
+        # Usamos 3 columnas: una para el select, otra para deshabilitar y otra para eliminar
+        c1, c2, c3 = st.columns([2, 1, 1])
+        
         with c1:
-            u_sel = st.selectbox("Seleccione Usuario:", df_reales['Usuario'].tolist())
-            idx = df_u[df_u['Usuario'] == u_sel].index[0]; est = df_u.at[idx, 'Estado_Licencia']
+            u_sel = st.selectbox("Usuario para gestionar:", df_reales['Usuario'].tolist())
+            idx = df_u[df_u['Usuario'] == u_sel].index[0]
+            est = df_u.at[idx, 'Estado_Licencia']
+            st.write(f"Estado: **{est}**")
+
         with c2:
-            st.write(f"Estado: {est}")
-            if st.button("🚫 Deshabilitar" if est=="Activo" else "✅ Habilitar"):
+            st.write("Acceso")
+            if st.button("🚫 Deshabilitar" if est=="Activo" else "✅ Habilitar", use_container_width=True):
                 df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est=="Activo" else "Activo"
                 guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
 
+        with c3:
+            st.write("Zona de Peligro")
+            confirmar = st.checkbox("Confirmar borrar", key="check_del")
+            if confirmar:
+                if st.button("🗑️ Eliminar Usuario", type="primary", use_container_width=True):
+                    df_u = df_u.drop(idx)
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                    st.success("Usuario eliminado")
+                    st.rerun()
+    else:
+        st.info("No hay otros usuarios registrados.")
+
     st.divider()
 
-    # --- 4. TABLA DE PERSONAL (SOLO LOS REALES) ---
+    # --- 4. TABLA DE PERSONAL ---
     st.subheader("📋 Personal Registrado")
     filtro = st.radio("Mostrar:", ["Todos", "Oficina", "Obra"], horizontal=True)
-    
-    df_v = df_reales.copy() # <-- AQUÍ YA NO SALES TÚ
+    df_v = df_reales.copy()
     if filtro == "Oficina": df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
     elif filtro == "Obra": df_v = df_v[df_v['Tipo_Personal'] == 'Obra']
 
