@@ -5,43 +5,56 @@ from modulos import seguridad, inventario, movimientos, mantenimiento, empresas,
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
 
-# --- 2. DISEÑO ADAPTATIVO ---
+# --- 2. DISEÑO ADAPTATIVO FORZADO (MODO OSCURO) ---
 def aplicar_diseno_jordan():
     st.markdown("""
         <style>
-        h1 { color: #0078D4 !important; font-weight: 800; }
-        .stButton>button { border-radius: 10px; width: 100%; transition: 0.3s; font-weight: bold; }
-        .stButton>button:hover { background-color: #0078D4 !important; color: white !important; }
-        [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
+        /* Fondo general y textos */
+        .stApp { background-color: #0E1117; color: #FFFFFF; }
+        
+        /* Títulos */
+        h1, h2, h3 { color: #0078D4 !important; font-weight: 800; }
+        
+        /* Botones */
+        .stButton>button { 
+            border-radius: 10px; 
+            width: 100%; 
+            background-color: #1E1E1E; 
+            color: white; 
+            border: 1px solid #0078D4;
+        }
+        .stButton>button:hover { background-color: #0078D4 !important; }
+        
+        /* Sidebar */
+        [data-testid="stSidebar"] { background-color: #161B22 !important; border-right: 1px solid #30363D; }
+        
+        /* Tablas (Para que no se vean blancas o grises feos) */
+        .stDataFrame { border: 1px solid #30363D; border-radius: 10px; background-color: #0E1117; }
+        
+        /* Inputs y Selectbox */
+        .stTextInput>div>div>input, .stSelectbox>div>div>div {
+            background-color: #161B22 !important;
+            color: white !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 
-# --- 3. CARGA DE DATOS BLINDADA ---
+# --- 3. CARGA DE DATOS ---
 def cargar_datos(pestaña):
     try:
-        # Forzamos lectura como texto inicialmente para seguridad
         df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
-        
-        # Normalización de seguridad para la pestaña Usuarios
         if pestaña == "Usuarios" and not df.empty:
             df['Usuario'] = df['Usuario'].str.strip().str.lower()
-            if 'Estado_Licencia' not in df.columns:
-                df['Estado_Licencia'] = 'Activo'
-            
-        # --- PARCHE CRÍTICO PARA MATEMÁTICAS ---
-        # Convertimos Stock en Inventario a número
+            if 'Estado_Licencia' not in df.columns: df['Estado_Licencia'] = 'Activo'
         if pestaña == "Inventario" and "Stock" in df.columns:
             df['Stock'] = pd.to_numeric(df['Stock'], errors='coerce').fillna(0).astype(int)
-            
-        # Convertimos Cantidad en Movimientos a número (ESTO ARREGLA TU ERROR)
         if pestaña == "Movimientos" and "Cantidad" in df.columns:
             df['Cantidad'] = pd.to_numeric(df['Cantidad'], errors='coerce').fillna(0)
-            
         return df
     except:
         return pd.DataFrame()
 
-# --- 4. FUNCIÓN DE GUARDADO GLOBAL ---
+# --- 4. GUARDADO GLOBAL ---
 def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
     try:
         with pd.ExcelWriter("database.xlsx", engine="openpyxl") as writer:
@@ -53,11 +66,10 @@ def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
             df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
         st.sidebar.success("💾 Base Sincronizada")
     except Exception as e:
-        st.error(f"❌ Error al guardar en Excel: {e}")
+        st.error(f"❌ Error al guardar: {e}")
 
-# --- 5. LÓGICA DE INICIO DE SESIÓN ---
-if 'conectado' not in st.session_state: 
-    st.session_state['conectado'] = False
+# --- 5. LOGUEO ---
+if 'conectado' not in st.session_state: st.session_state['conectado'] = False
 
 aplicar_diseno_jordan()
 
@@ -65,8 +77,7 @@ if not st.session_state['conectado']:
     st.title("🔐 Acceso Jordan Admin Pro")
     u_in = st.text_input("Usuario")
     p_in = st.text_input("Contraseña", type="password")
-    
-    if st.button("🚀 Ingresar al Sistema"):
+    if st.button("🚀 Ingresar"):
         u_l = u_in.strip().lower()
         es_m, rol_m = seguridad.verificar_clave(u_l, p_in, None)
         if es_m and rol_m == "Desarrollador":
@@ -77,21 +88,16 @@ if not st.session_state['conectado']:
             if not df_u_login.empty:
                 row = df_u_login[df_u_login['Usuario'] == u_l]
                 if not row.empty:
-                    estado_lic = str(row.iloc[0].get('Estado_Licencia', 'Activo'))
-                    if estado_lic == "Inactivo":
-                        st.error("🚫 **LICENCIA DESHABILITADA:** Contacte al Desarrollador.")
-                    else:
-                        clave_excel = str(row.iloc[0]['Clave'])
-                        valido, _ = seguridad.verificar_clave(u_l, p_in, clave_excel)
-                        if valido:
-                            st.session_state.update({'conectado': True, 'user': u_l, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol']})
-                            st.rerun()
-                        else: st.error("❌ Contraseña incorrecta")
+                    if str(row.iloc[0].get('Estado_Licencia', 'Activo')) == "Inactivo":
+                        st.error("🚫 LICENCIA DESHABILITADA")
+                    elif seguridad.verificar_clave(u_l, p_in, str(row.iloc[0]['Clave']))[0]:
+                        st.session_state.update({'conectado': True, 'user': u_l, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol']})
+                        st.rerun()
+                    else: st.error("❌ Contraseña incorrecta")
                 else: st.error("❌ Usuario no registrado")
-            else: st.error("❌ Error al conectar con la base de datos")
 
 else:
-    # CARGA DE DATOS
+    # PANEL PRINCIPAL
     df_inv = cargar_datos("Inventario")
     df_mov = cargar_datos("Movimientos")
     df_u = cargar_datos("Usuarios")
@@ -100,7 +106,6 @@ else:
     df_papelera = cargar_datos("Papelera")
 
     st.sidebar.title(f"👤 {st.session_state['nombre']}")
-    st.sidebar.info(f"Rol: **{st.session_state['rol']}**")
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state['conectado'] = False
         st.rerun()
@@ -115,11 +120,8 @@ else:
 
     tabs = st.tabs(lista_tabs)
 
-    with tabs[0]: 
-        inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
-    with tabs[1]: 
-        movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
-    
+    with tabs[0]: inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
+    with tabs[1]: movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
     try:
         if es_mando_medio:
             with tabs[2]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
@@ -127,4 +129,4 @@ else:
         if es_poder_total:
             with tabs[4]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
             with tabs[5]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
-    except IndexError: pass
+    except: pass
