@@ -50,27 +50,23 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (BOTONES GIGANTES UNO AL LADO DEL OTRO) ---
+    # --- 3. PANEL DE CONTROL (PARA DESARROLLADOR) ---
     mi_rol = str(st.session_state.get('rol', '')).lower().strip()
     
     if "desarrollador" in mi_rol:
         st.subheader("🛠️ Panel de Control de Acceso (Solo Desarrollador)")
-        
-        # Excluimos a 'jordan' para que no te borres tú mismo
         u_gest = df_u[df_u['Usuario'] != 'jordan']
         
         if not u_gest.empty:
-            # Dividimos en 3 columnas iguales
             c1, c2, c3 = st.columns(3)
             
             with c1:
-                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist(), key="sel_admin")
+                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist(), key="admin_gest")
                 idx = df_u[df_u['Usuario'] == u_sel].index[0]
                 est_act = df_u.at[idx, 'Estado_Licencia']
                 st.write(f"Estado actual: **{est_act}**")
 
             with c2:
-                # BOTÓN DESHABILITAR
                 st.write("¿Cambiar acceso?")
                 txt_bt = "✅ Habilitar" if est_act == "Inactivo" else "🚫 Deshabilitar"
                 if st.button(txt_bt, use_container_width=True):
@@ -79,22 +75,28 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                     st.rerun()
 
             with c3:
-                # BOTÓN ELIMINAR DIRECTO
                 st.write("¿Borrar para siempre?")
-                confirma_borrar = st.checkbox("Confirmar eliminación", key="chk_borrar")
+                confirma_borrar = st.checkbox("Confirmar eliminación", key="del_chk")
                 if st.button("🗑️ Eliminar Usuario", type="primary", use_container_width=True):
                     if confirma_borrar:
                         df_u = df_u[df_u['Usuario'] != u_sel]
                         guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                        st.success(f"Usuario {u_sel} eliminado")
+                        st.success("Usuario eliminado")
                         st.rerun()
                     else:
-                        st.warning("Marca la casilla para eliminar")
-        else:
-            st.info("No hay otros usuarios registrados.")
-        
+                        st.warning("Marca la casilla")
         st.divider()
 
-    # --- 4. VISTA DE TABLA ---
+    # --- 4. VISTA DE TABLA CON COLORES ---
     st.subheader("📋 Personal Registrado")
-    st.dataframe(df_u[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia']], use_container_width=True)
+    
+    # Preparamos vista (Inactivo -> Deshabilitado)
+    df_v = df_u[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia']].copy()
+    df_v['Estado_Licencia'] = df_v['Estado_Licencia'].replace('Inactivo', 'Deshabilitado')
+
+    # Función de color: Verde para Activo, Rojo para Deshabilitado
+    def style_estado(val):
+        color = '#28a745' if val == 'Activo' else '#dc3545'
+        return f'color: {color}; font-weight: bold'
+
+    st.dataframe(df_v.style.applymap(style_estado, subset=['Estado_Licencia']), use_container_width=True)
