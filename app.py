@@ -1,111 +1,121 @@
 import streamlit as st
 import pandas as pd
-import bcrypt
-import time
-from modulos import seguridad, inventario, movimientos, mantenimiento, empresas, usuarios, historial
 
-# 1. CONFIGURACIÓN
-st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
+def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
+    st.title("👥 Gestión de Personal y Control de Licencias")
 
-# --- 2. CARGA DE DATOS ---
-def cargar_datos(pestaña):
-    try:
-        df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
-        if pestaña == "Usuarios" and not df.empty:
-            df.columns = df.columns.str.strip()
-            df['Usuario'] = df['Usuario'].astype(str).str.strip().str.lower()
-        return df
-    except:
-        time.sleep(0.5)
-        try:
-            return pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
-        except:
-            return pd.DataFrame()
+    # --- 1. BARRA DE LICENCIAS ---
+    # Limpieza de datos por seguridad
+    df_u['Usuario'] = df_u['Usuario'].astype(str).str.strip().str.lower()
+    
+    # Filtramos para el conteo (No contamos a 'jordan' que eres tú)
+    df_reales = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
+    
+    u_cont = len(df_reales)
+    st.write(f"**Uso de Licencias:** {u_cont} de 50")
+    st.progress(min(u_cont / 50, 1.0))
+    st.divider()
 
-# --- 3. GUARDADO GLOBAL ---
-def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
-    try:
-        with pd.ExcelWriter("database.xlsx", engine="openpyxl") as writer:
-            df_inv.to_excel(writer, sheet_name="Inventario", index=False)
-            df_mov.to_excel(writer, sheet_name="Movimientos", index=False)
-            df_u.to_excel(writer, sheet_name="Usuarios", index=False)
-            df_mant.to_excel(writer, sheet_name="Mantenimiento", index=False)
-            df_lug.to_excel(writer, sheet_name="Lugares", index=False)
-            df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
-        st.sidebar.success("💾 ¡Sincronizado!")
-    except:
-        st.error("❌ Error al guardar. Verifica que el Excel no esté abierto.")
+    # --- 2. REGISTRO DE PERSONAL (OFICINA / OBRA) ---
+    tab_reg1, tab_reg2 = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
+    
+    with tab_reg1:
+        with st.form("form_registro_oficina"):
+            n = st.text_input("Nombre Completo")
+            u = st.text_input("Usuario (Nick)").lower().strip()
+            c = st.text_input("Clave de Acceso", type="password")
+            r = st.selectbox("Rol del Usuario", ["Administrador", "Supervisor", "Logística"])
+            if st.form_submit_button("🚀 Registrar en Oficina"):
+                if n and u and c:
+                    if u in df_u['Usuario'].values:
+                        st.error(f"❌ El usuario '{u}' ya existe. Prueba con otro.")
+                    else:
+                        nuevo = pd.DataFrame([{"Nombre":n,"Usuario":u,"Clave":c,"Rol":r,"Tipo_Personal":"Oficina","Estado_Licencia":"Activo"}])
+                        df_u = pd.concat([df_u, nuevo], ignore_index=True)
+                        guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                        st.success(f"✅ Usuario {u} creado con éxito.")
+                        st.rerun()
+                else:
+                    st.warning("Completa todos los campos.")
 
-# --- 4. LOGIN ---
-if 'conectado' not in st.session_state:
-    st.session_state['conectado'] = False
+    with tab_reg2:
+        with st.form("form_registro_obra"):
+            n = st.text_input("Nombre Completo ")
+            u = st.text_input("Usuario Taller").lower().strip()
+            c = st.text_input("Clave Taller", type="password")
+            r = st.selectbox("Especialidad", ["Maestro de Obra", "Soldador", "Cortador", "Amolador", "Pintor"])
+            if st.form_submit_button("🛠️ Registrar en Taller"):
+                if n and u and c:
+                    if u in df_u['Usuario'].values:
+                        st.error(f"❌ El usuario '{u}' ya existe.")
+                    else:
+                        nuevo = pd.DataFrame([{"Nombre":n,"Usuario":u,"Clave":c,"Rol":r,"Tipo_Personal":"Obra","Estado_Licencia":"Activo"}])
+                        df_u = pd.concat([df_u, nuevo], ignore_index=True)
+                        guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                        st.success(f"✅ Usuario {u} creado.")
+                        st.rerun()
 
-if not st.session_state['conectado']:
-    st.title("🔐 Acceso Jordan Admin Pro")
-    u_in = st.text_input("Usuario").strip().lower()
-    p_in = st.text_input("Contraseña", type="password")
-    if st.button("🚀 Ingresar"):
-        df_u_login = cargar_datos("Usuarios")
-        if not df_u_login.empty:
-            row = df_u_login[df_u_login['Usuario'] == u_in]
-            if not row.empty and (p_in == str(row.iloc[0]['Clave']).strip()):
-                st.session_state.update({
-                    'conectado': True, 
-                    'user': u_in, 
-                    'nombre': row.iloc[0]['Nombre'], 
-                    'rol': row.iloc[0]['Rol']
-                })
-                st.rerun()
+    st.divider()
+
+    # --- 3. PANEL DE CONTROL (GESTIÓN DIRECTA) ---
+    st.subheader("🛠️ Panel de Control de Acceso")
+    if not df_reales.empty:
+        c1, c2, c3 = st.columns([2, 1, 1])
+        
+        with c1:
+            u_sel = st.selectbox("Seleccione Usuario para gestionar:", df_reales['Usuario'].tolist(), key="sel_user_v4")
+            # Extraer datos del seleccionado
+            user_info = df_u[df_u['Usuario'] == u_sel]
+            if not user_info.empty:
+                idx = user_info.index[0]
+                est_act = df_u.at[idx, 'Estado_Licencia']
+                st.write(f"Estado Actual: **{est_act}**")
             else:
-                st.error("❌ Credenciales incorrectas")
+                st.rerun()
 
-# --- 5. PANEL PRINCIPAL ---
-else:
-    df_inv = cargar_datos("Inventario")
-    df_mov = cargar_datos("Movimientos")
-    df_u = cargar_datos("Usuarios")
-    df_mant = cargar_datos("Mantenimiento")
-    df_lug = cargar_datos("Lugares")
-    df_papelera = cargar_datos("Papelera")
+        with c2:
+            st.write("Acción")
+            bt_txt = "🚫 Deshabilitar" if est_act == "Activo" else "✅ Habilitar"
+            if st.button(bt_txt, use_container_width=True):
+                df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est_act == "Activo" else "Activo"
+                guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                st.rerun()
 
-    with st.sidebar:
-        st.title(f"👤 {st.session_state['nombre']}")
-        st.info(f"Rol: {st.session_state['rol']}")
-        if st.button("🚪 Cerrar Sesión"):
-            st.session_state['conectado'] = False
-            st.rerun()
+        with c3:
+            st.write("Seguridad")
+            if st.checkbox("Confirmar borrar", key="check_del_v4"):
+                if st.button("🗑️ Eliminar Usuario", type="primary", use_container_width=True):
+                    df_u = df_u.drop(idx).reset_index(drop=True)
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                    st.rerun()
+    else:
+        st.info("💡 No hay personal registrado para gestionar.")
 
-    rol = st.session_state['rol']
-    es_admin = any(x in rol for x in ["Desarrollador", "Administrador"])
-    es_mando = any(x in rol for x in ["Desarrollador", "Administrador", "Supervisor", "Maestro de Obra"])
-    
-    tabs_n = ["📦 Inventario", "🔄 Movimientos"]
-    if es_mando: tabs_n += ["🛠️ Mantenimiento", "🏢 Empresas"]
-    if es_admin: tabs_n += ["👤 Usuarios", "📜 Historial"]
-    
-    tabs = st.tabs(tabs_n)
+    st.divider()
 
-    # --- AQUÍ ESTABA EL ERROR CORREGIDO ---
-    with tabs[0]:
-        inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
+    # --- 4. LISTA DE PERSONAL (TABLA FIJA) ---
+    st.subheader("📋 Personal Registrado")
     
-    with tabs[1]:
-        movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
+    # Filtro visual rápido
+    f_vista = st.radio("Filtrar Tabla:", ["Todos", "Oficina", "Obra"], horizontal=True, key="rad_v4")
     
-    try:
-        curr = 2
-        if es_mando:
-            with tabs[curr]:
-                mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
-            curr += 1
-            with tabs[curr]:
-                empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera)
-            curr += 1
-        if es_admin:
-            with tabs[curr]:
-                usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
-            curr += 1
-            with tabs[curr]:
-                historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
-    except:
-        pass
+    df_v = df_reales.copy()
+    if f_vista == "Oficina": df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
+    elif f_vista == "Obra": df_v = df_v[df_v['Tipo_Personal'] == 'Obra']
+
+    if not df_v.empty:
+        df_v['Estado_Licencia'] = df_v['Estado_Licencia'].replace('Inactivo', 'Deshabilitado')
+        
+        # Estilo de colores
+        def aplicar_color(val):
+            color = '#28a745' if val == 'Activo' else '#dc3545'
+            return f'color: {color}; font-weight: bold'
+
+        st.dataframe(
+            df_v[['Nombre', 'Usuario', 'Rol', 'Tipo_Personal', 'Estado_Licencia']].style.applymap(
+                aplicar_color, subset=['Estado_Licencia']
+            ), 
+            use_container_width=True
+        )
+    else:
+        st.warning("⚠️ No se encontraron registros en esta categoría.")
