@@ -7,12 +7,13 @@ from modulos import seguridad, inventario, movimientos, mantenimiento, empresas,
 # 1. CONFIGURACIÓN
 st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
 
-# --- 2. CARGA DE DATOS ---
+# --- 2. CARGA DE DATOS SEGUROS ---
 def cargar_datos(pestaña):
     if not os.path.exists("database.xlsx"): return pd.DataFrame()
     try:
         df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
         df.columns = df.columns.str.strip()
+        # Limpiamos datos para evitar errores de comparación
         for col in df.columns: df[col] = df[col].astype(str).str.strip()
         if pestaña == "Usuarios":
             df['Usuario'] = df['Usuario'].str.lower()
@@ -33,28 +34,28 @@ def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
             df_mant.to_excel(writer, sheet_name="Mantenimiento", index=False)
             df_lug.to_excel(writer, sheet_name="Lugares", index=False)
             df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
-        st.sidebar.success("💾 ¡Sincronizado!")
-    except: st.error("❌ Cierra el Excel para guardar.")
+        st.sidebar.success("💾 Base Sincronizada")
+    except: st.error("❌ Error: Cierra el Excel antes de guardar.")
 
-# --- 4. LÓGICA DE LOGIN Y SEGURIDAD ---
+# --- 4. LÓGICA DE LOGIN Y BLOQUEO ---
 if 'conectado' not in st.session_state: st.session_state['conectado'] = False
-if 'intentos' not in st.session_state: st.session_state['intentos'] = 0 # CONTADOR
+if 'intentos' not in st.session_state: st.session_state['intentos'] = 0
 
 if not st.session_state['conectado']:
     st.title("🔐 Acceso Jordan Admin Pro")
     
-    # Bloqueo visual si llega a 3
+    # PUNTO 1: Bloqueo tras 3 intentos
     if st.session_state['intentos'] >= 3:
-        st.error("🚫 ACCESO BLOQUEADO: Demasiados intentos fallidos. Contacta al Desarrollador.")
-        if st.button("🔄 Reintentar (Solo Jordan)"):
+        st.error("🚫 SISTEMA BLOQUEADO: Demasiados intentos. Contacte al administrador.")
+        if st.button("🔄 Reiniciar intentos (Jordan Only)"):
             st.session_state['intentos'] = 0
             st.rerun()
     else:
-        with st.form("login_form"):
+        with st.form("login_seguro"):
             u_in = st.text_input("Usuario").strip().lower()
             p_in = st.text_input("Contraseña", type="password").strip()
             if st.form_submit_button("🚀 Ingresar", use_container_width=True):
-                # ACCESO MAESTRO
+                # PUNTO 2: Acceso Maestro Jordan
                 if u_in == "jordan" and p_in == "170362":
                     st.session_state.update({'conectado': True, 'user': 'jordan', 'nombre': 'JORDAN DAMIAN', 'rol': 'Desarrollador', 'intentos': 0})
                     st.rerun()
@@ -63,13 +64,16 @@ if not st.session_state['conectado']:
                     row = df_u[df_u['Usuario'] == u_in] if not df_u.empty else pd.DataFrame()
                     
                     if not row.empty and str(row.iloc[0]['Clave']).strip() == p_in:
-                        st.session_state.update({'conectado': True, 'user': u_in, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol'], 'intentos': 0})
-                        st.rerun()
+                        # PUNTO 3: Verificación de Estado (Si está deshabilitado no entra)
+                        if row.iloc[0].get('Estado_Licencia') == "Inactivo":
+                            st.error("🚫 Tu cuenta ha sido deshabilitada.")
+                        else:
+                            st.session_state.update({'conectado': True, 'user': u_in, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol'], 'intentos': 0})
+                            st.rerun()
                     else:
                         st.session_state['intentos'] += 1
-                        st.error(f"❌ Credenciales incorrectas. Intento {st.session_state['intentos']} de 3")
-                        if st.session_state['intentos'] >= 3:
-                            st.rerun()
+                        st.error(f"❌ Datos incorrectos. Intento {st.session_state['intentos']} de 3")
+                        if st.session_state['intentos'] >= 3: st.rerun()
 
 # --- 5. PANEL PRINCIPAL ---
 else:
@@ -77,6 +81,7 @@ else:
     df_u = cargar_datos("Usuarios"); df_mant = cargar_datos("Mantenimiento")
     df_lug = cargar_datos("Lugares"); df_papelera = cargar_datos("Papelera")
 
+    # Sidebar con Perfil
     with st.sidebar:
         st.subheader(f"👤 {st.session_state['nombre']}")
         st.caption(f"🛡️ Rol: {st.session_state['rol']}")
@@ -84,20 +89,26 @@ else:
             st.session_state['conectado'] = False
             st.rerun()
 
+    # PUNTO 4: Permisos por Rol
     rol = st.session_state['rol']
     es_admin = any(x in ["Desarrollador", "Administrador"] for x in [rol])
     es_mando = any(x in ["Desarrollador", "Administrador", "Supervisor", "Maestro de Obra"] for x in [rol])
     
-    tabs = st.tabs(["📦 Inventario", "🔄 Movimientos"] + (["🛠️ Mantenimiento", "🏢 Empresas"] if es_mando else []) + (["👤 Usuarios", "📜 Historial"] if es_admin else []))
+    # Construcción de pestañas dinámica
+    tabs_n = ["📦 Inventario", "🔄 Movimientos"]
+    if es_mando: tabs_n += ["🛠️ Mantenimiento", "🏢 Empresas"]
+    if es_admin: tabs_n += ["👤 Usuarios", "📜 Historial"]
     
+    tabs = st.tabs(tabs_n)
+    
+    # PUNTO 5: Inyección controlada
     with tabs[0]: inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     with tabs[1]: movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
     
-    # Manejo dinámico de pestañas para evitar errores de índice
-    c = 2
+    idx = 2
     if es_mando:
-        with tabs[c]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera); c+=1
-        with tabs[c]: empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera); c+=1
+        with tabs[idx]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera); idx += 1
+        with tabs[idx]: empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera); idx += 1
     if es_admin:
-        with tabs[c]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera); c+=1
-        with tabs[c]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
+        with tabs[idx]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera); idx += 1
+        with tabs[idx]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
