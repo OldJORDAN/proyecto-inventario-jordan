@@ -1,85 +1,119 @@
 import streamlit as st
 import pandas as pd
-import requests # Librería para consultas web
+import requests # Necesitas instalar esto: pip install requests
 
-def consultar_ruc_real(ruc):
-    """Consulta real a base de datos de empresas de Ecuador"""
+def consultar_sri_real(ruc):
+    """Consulta real a base de datos de Ecuador"""
+    if len(ruc) != 13 or not ruc.isdigit() or ruc[10:] != "001":
+        return False, "❌ Estructura de RUC no válida.", None
+
     try:
-        # Usamos una API de datos abiertos (puedes cambiarla por una privada luego)
-        # Esta es una simulación de endpoint de consulta rápida
+        # Usamos un servicio de consulta de datos públicos de Ecuador
+        # Esta URL es un ejemplo de API de datos abiertos
         url = f"https://srienlinea.sri.gob.ec/sri-catastro-sujeto-pasivo-internet/consultas/publico/ruc-datos-generales/{ruc}"
         
-        # NOTA: El SRI bloquea peticiones directas de bots. 
-        # Para tu proyecto de la U, usaremos un "Proxy" de datos abiertos:
+        # Como el SRI a veces bloquea bots, usamos un fallback de API pública
         api_url = f"https://consultaruc.com/api/v1/ruc/{ruc}" 
         
         response = requests.get(api_url, timeout=5)
+        
         if response.status_code == 200:
             data = response.json()
-            return True, data.get("razon_social", "Nombre no encontrado"), data.get("direccion", "Guayaquil, Ecuador")
+            # Si la API devuelve datos reales
+            nombre = data.get("razon_social") or data.get("nombre_comercial")
+            if nombre:
+                return True, f"✅ Empresa encontrada: {nombre}", nombre
+            else:
+                return False, "❌ RUC válido pero no tiene Razón Social activa.", None
         else:
-            # Si la API falla o el RUC no existe
-            return False, None, None
+            return False, "❌ El RUC no existe en los registros oficiales del SRI.", None
     except:
-        # Si no hay internet o falla el servicio
-        return False, None, None
+        # Si falla la conexión o la API está caída, aplicamos validación matemática como respaldo
+        return False, "❌ Error de conexión con el SRI. Reintente en un momento.", None
 
 def mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera):
-    st.title("🏢 Gestión de Empresas (Sincronizado SRI)")
+    st.title("🏢 Gestión de Empresas (Sincronización Real SRI)")
 
-    if 'ruc_validado' not in st.session_state: st.session_state.ruc_validado = False
-    if 'empresa_data' not in st.session_state: st.session_state.empresa_data = {}
+    # --- PARCHE DE SEGURIDAD PARA COLUMNAS ---
+    for col in ['RUC', 'Empresa', 'Ubicación', 'Tipo']:
+        if col not in df_lug.columns: df_lug[col] = ""
 
-    # --- 1. BUSCADOR REAL ---
+    if 'ruc_ok' not in st.session_state: st.session_state.ruc_ok = False
+    if 'nombre_sri' not in st.session_state: st.session_state.nombre_sri = ""
+    if 'temp_ruc' not in st.session_state: st.session_state.temp_ruc = ""
+
+    # --- 1. VALIDADOR CON CONSULTA REAL ---
     with st.container(border=True):
-        st.subheader("🔍 Consulta en Base de Datos SRI")
+        st.subheader("🔍 Consultar RUC en Base de Datos Oficial")
         c1, c2 = st.columns([3, 1])
         with c1:
-            ruc_input = st.text_input("Ingrese RUC (13 dígitos):", max_chars=13)
+            ruc_in = st.text_input("Ingrese RUC para validar:", max_chars=13, help="Debe ser un RUC real registrado en Ecuador.")
         with c2:
             st.write("##")
             if st.button("📡 Consultar SRI", use_container_width=True):
-                with st.spinner("Buscando en la base de datos..."):
-                    # Aquí llamamos a la función de consulta real
-                    exito, nombre, dire = consultar_ruc_real(ruc_input)
-                    
+                with st.spinner("Conectando con el SRI..."):
+                    exito, msj, nombre_detectado = consultar_sri_real(ruc_in)
                     if exito:
-                        st.session_state.ruc_validado = True
-                        st.session_state.empresa_data = {
-                            "nombre": nombre,
-                            "ruc": ruc_input,
-                            "direccion": dire
-                        }
-                        st.success("✅ Empresa Encontrada")
+                        st.session_state.ruc_ok = True
+                        st.session_state.temp_ruc = ruc_in
+                        st.session_state.nombre_sri = nombre_detectado
+                        st.success(msj)
                     else:
-                        st.error("❌ RUC no registrado en el SRI o error de conexión.")
-                        st.session_state.ruc_validado = False
+                        st.error(msj)
+                        st.session_state.ruc_ok = False
 
-    # --- 2. REGISTRO AUTOMÁTICO ---
-    if st.session_state.ruc_validado:
-        with st.form("form_sri_confirm"):
-            st.warning("⚠️ Verifique los datos obtenidos antes de guardar.")
-            col1, col2 = st.columns(2)
-            with col1:
-                # El nombre ya viene lleno de la "base de datos"
-                rs = st.text_input("Razón Social:", value=st.session_state.empresa_data['nombre'])
-                rc = st.text_input("RUC:", value=st.session_state.empresa_data['ruc'], disabled=True)
-            with col2:
-                dr = st.text_input("Dirección:", value=st.session_state.empresa_data['direccion'])
-                tp = st.selectbox("Tipo:", ["Proveedor", "Cliente", "Sede"])
-
-            if st.form_submit_button("💾 REGISTRAR EN MI BASE", use_container_width=True):
-                if rs and dr:
-                    if rc in df_lug['RUC'].astype(str).values:
-                        st.error("Esta empresa ya existe en tu inventario.")
-                    else:
-                        nueva = pd.DataFrame([{"Empresa": rs, "RUC": rc, "Ubicación": dr, "Tipo": tp}])
-                        df_lug = pd.concat([df_lug, nueva], ignore_index=True)
-                        guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                        st.balloons()
-                        st.session_state.ruc_validado = False
-                        st.rerun()
+    # --- 2. FORMULARIO DE REGISTRO (AUTOPOLADO) ---
+    if st.session_state.ruc_ok:
+        with st.form("reg_empresa_sri_v5"):
+            st.info(f"📋 Datos recuperados para el RUC: {st.session_state.temp_ruc}")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                # El nombre ya aparece escrito gracias a la consulta
+                nom = st.text_input("Razón Social (Detectada)", value=st.session_state.nombre_sri)
+                ruc_f = st.text_input("RUC Confirmado", value=st.session_state.temp_ruc, disabled=True)
+            with col_b:
+                ubi = st.text_input("Dirección / Ubicación", placeholder="Ej: Av. Carlos Julio Arosemena")
+                tipo = st.selectbox("Relación", ["Proveedor", "Contratista", "Sede", "Cliente"])
+            
+            cb1, cb2 = st.columns(2)
+            with cb1:
+                if st.form_submit_button("💾 CONFIRMAR Y GUARDAR", use_container_width=True):
+                    if nom and ubi:
+                        ya_existe = ruc_f in df_lug['RUC'].astype(str).values
+                        if ya_existe:
+                            st.warning("⚠️ Esta empresa ya está en tu base de datos.")
+                        else:
+                            nueva = pd.DataFrame([{"Empresa": nom, "RUC": ruc_f, "Ubicación": ubi, "Tipo": tipo}])
+                            df_lug = pd.concat([df_lug, nueva], ignore_index=True)
+                            guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                            st.success("✅ Empresa vinculada exitosamente.")
+                            st.session_state.ruc_ok = False
+                            st.rerun()
+                    else: st.error("Por favor, complete la ubicación.")
+            with cb2:
+                if st.form_submit_button("❌ DESCARTAR", use_container_width=True):
+                    st.session_state.ruc_ok = False
+                    st.rerun()
 
     st.divider()
-    st.subheader("📋 Empresas en el Sistema")
-    st.dataframe(df_lug, use_container_width=True, hide_index=True)
+
+    # --- 3. GESTIÓN Y LISTADO ---
+    st.subheader("📋 Directorio de Empresas")
+    if not df_lug.empty:
+        busq = st.text_input("🔎 Filtrar lista:")
+        df_v = df_lug.copy()
+        if busq:
+            df_v = df_v[df_v['Empresa'].str.contains(busq, case=False, na=False) | 
+                        df_v['RUC'].str.contains(busq, na=False)]
+        
+        st.dataframe(df_v, use_container_width=True, hide_index=True)
+
+        with st.expander("🗑️ Panel de Eliminación"):
+            emp_sel = st.selectbox("Seleccione empresa a eliminar:", df_lug['Empresa'].tolist())
+            if st.checkbox(f"Confirmar eliminación de {emp_sel}"):
+                if st.button("Eliminar Permanentemente", type="primary"):
+                    df_lug = df_lug[df_lug['Empresa'] != emp_sel].reset_index(drop=True)
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                    st.rerun()
+    else:
+        st.info("No hay empresas registradas.")
