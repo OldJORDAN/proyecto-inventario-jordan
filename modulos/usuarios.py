@@ -30,6 +30,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                         nuevo = pd.DataFrame([{"Nombre":n,"Usuario":u,"Clave":c,"Rol":r,"Tipo_Personal":"Oficina","Estado_Licencia":"Activo"}])
                         df_u = pd.concat([df_u, nuevo], ignore_index=True)
                         guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                        st.success(f"✅ {u} registrado")
                         st.rerun()
 
     with t2:
@@ -46,6 +47,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                         nuevo = pd.DataFrame([{"Nombre":n,"Usuario":u,"Clave":c,"Rol":r,"Tipo_Personal":"Obra","Estado_Licencia":"Activo"}])
                         df_u = pd.concat([df_u, nuevo], ignore_index=True)
                         guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                        st.success(f"✅ {u} registrado")
                         st.rerun()
 
     st.divider()
@@ -68,21 +70,24 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
             st.write("Acceso")
             if st.button("🚫 Deshabilitar" if est=="Activo" else "✅ Habilitar", use_container_width=True):
                 df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est=="Activo" else "Activo"
-                guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
+                guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                st.rerun()
 
         with c3:
             st.write("Zona de Peligro")
-            if st.checkbox("Confirmar borrar", key="safe_del"):
+            if st.checkbox("Confirmar borrar", key="safe_del_check"):
                 if st.button("🗑️ Eliminar", type="primary", use_container_width=True):
                     df_u = df_u.drop(idx).reset_index(drop=True)
-                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera); st.rerun()
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                    st.rerun()
     else:
-        st.info("No hay personal para gestionar.")
+        st.info("No hay personal registrado.")
 
     st.divider()
 
-    # --- 4. LA PESTAÑITA DESPLEGABLE (LO QUE PEDISTE) ---
-    with st.expander("📋 Ver Lista de Personal Registrado", expanded=False):
+    # --- 4. LA TABLA (EXPANDIDA POR DEFECTO) ---
+    # Le ponemos expanded=True para que no "desaparezca" al registrar
+    with st.expander("📋 Ver Lista de Personal Registrado", expanded=True):
         f_v = st.radio("Filtrar vista:", ["Todos", "Oficina", "Obra"], horizontal=True)
         
         df_v = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
@@ -99,4 +104,4 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                 use_container_width=True
             )
         else:
-            st.warning("No hay registros en esta categoría.")
+            st.warning("No hay registros disponibles.")
