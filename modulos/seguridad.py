@@ -1,29 +1,48 @@
-import bcrypt
+import streamlit as st
+import pandas as pd
 
-def encriptar_clave(password):
+def verificar_clave(usuario_ingresado, clave_ingresada, df_usuarios):
     """
-    Toma una contraseña en texto plano (ej: 'admin123') 
-    y la convierte en un hash de seguridad ilegible.
+    Función que valida las credenciales y cuenta los intentos.
     """
-    # Generar la 'sal' (salt) para que el hash sea único aunque la clave sea igual
-    salt = bcrypt.gensalt()
-    # Encriptar
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    # Devolver como string para que se pueda guardar en Excel
-    return hashed.decode('utf-8')
+    # 1. INICIALIZAR CONTADOR DE SEGURIDAD
+    if 'intentos' not in st.session_state:
+        st.session_state.intentos = 0
+    
+    # 2. VERIFICAR SI YA ESTÁ BLOQUEADO
+    if st.session_state.intentos >= 3:
+        st.error("🚫 **ACCESO BLOQUEADO:** Has fallado 3 veces. Por seguridad, el sistema se ha cerrado. Contacta a Jordan Damian.")
+        return None, None
 
-def verificar_clave(password_ingresada, hashed_password_guardada):
+    # 3. PROCESO DE VALIDACIÓN
+    # Buscamos al usuario en el DataFrame (ignorando mayúsculas/minúsculas para evitar errores)
+    usuario_encontrado = df_usuarios[df_usuarios['Usuario'].str.lower() == usuario_ingresado.lower()]
+
+    if not usuario_encontrado.empty:
+        # Comparamos la clave (aquí puedes usar bcrypt si ya lo tienes implementado)
+        clave_real = str(usuario_encontrado.iloc[0]['Clave'])
+        
+        if str(clave_ingresada) == clave_real:
+            # ¡ÉXITO! Reiniciamos intentos y devolvemos datos
+            st.session_state.intentos = 0
+            return True, usuario_encontrado.iloc[0]['Rol']
+        else:
+            # CLAVE ERRÓNEA
+            st.session_state.intentos += 1
+            intentos_restantes = 3 - st.session_state.intentos
+            st.warning(f"❌ Clave incorrecta. Te quedan **{intentos_restantes}** intentos.")
+            return False, None
+    else:
+        # USUARIO NO EXISTE
+        st.session_state.intentos += 1
+        intentos_restantes = 3 - st.session_state.intentos
+        st.error(f"👤 El usuario '{usuario_ingresado}' no existe. Te quedan **{intentos_restantes}** intentos.")
+        return False, None
+
+def limpiar_texto(texto):
     """
-    Compara la clave que el usuario escribe en el login 
-    con la clave encriptada que tenemos en el Excel.
+    Función 'Anti-Inyección': Quita símbolos raros que usan los hackers.
     """
-    try:
-        # Verificamos si la clave coincide
-        return bcrypt.checkpw(
-            password_ingresada.encode('utf-8'), 
-            hashed_password_guardada.encode('utf-8')
-        )
-    except Exception:
-        # Si la clave del Excel no está encriptada (formato viejo), 
-        # devolvemos False para evitar que el programa se cierre.
-        return False
+    import re
+    # Solo permite letras, números y espacios
+    return re.sub(r'[^a-zA-Z0-9 ]', '', texto)
