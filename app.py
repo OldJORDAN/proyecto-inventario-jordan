@@ -4,27 +4,25 @@ import bcrypt
 import time
 from modulos import seguridad, inventario, movimientos, mantenimiento, empresas, usuarios, historial
 
-# 1. CONFIGURACIÓN DE PÁGINA
+# 1. CONFIGURACIÓN
 st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
 
-# --- 2. FUNCIÓN DE CARGA DE DATOS ---
+# --- 2. CARGA DE DATOS ---
 def cargar_datos(pestaña):
     try:
         df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
         if pestaña == "Usuarios" and not df.empty:
             df.columns = df.columns.str.strip()
             df['Usuario'] = df['Usuario'].astype(str).str.strip().str.lower()
-            if 'Estado_Licencia' not in df.columns:
-                df['Estado_Licencia'] = 'Activo'
         return df
-    except Exception:
+    except:
         time.sleep(0.5)
         try:
             return pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
         except:
             return pd.DataFrame()
 
-# --- 3. FUNCIÓN DE GUARDADO GLOBAL ---
+# --- 3. GUARDADO GLOBAL ---
 def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
     try:
         with pd.ExcelWriter("database.xlsx", engine="openpyxl") as writer:
@@ -35,10 +33,10 @@ def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
             df_lug.to_excel(writer, sheet_name="Lugares", index=False)
             df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
         st.sidebar.success("💾 ¡Sincronizado!")
-    except Exception as e:
-        st.error(f"❌ Error al guardar: {e}")
+    except:
+        st.error("❌ Error al guardar. Verifica que el Excel no esté abierto.")
 
-# --- 4. ACCESO (LOGIN) ---
+# --- 4. LOGIN ---
 if 'conectado' not in st.session_state:
     st.session_state['conectado'] = False
 
@@ -46,43 +44,34 @@ if not st.session_state['conectado']:
     st.title("🔐 Acceso Jordan Admin Pro")
     u_in = st.text_input("Usuario").strip().lower()
     p_in = st.text_input("Contraseña", type="password")
-    
     if st.button("🚀 Ingresar"):
         df_u_login = cargar_datos("Usuarios")
         if not df_u_login.empty:
             row = df_u_login[df_u_login['Usuario'] == u_in]
-            if not row.empty:
-                clave_ex = str(row.iloc[0]['Clave']).strip()
-                valido = False
-                if clave_ex.startswith('$2b$'):
-                    try:
-                        if bcrypt.checkpw(p_in.encode(), clave_ex.encode()):
-                            valido = True
-                    except: pass
-                if not valido and p_in == clave_ex:
-                    valido = True
-                
-                if valido:
-                    st.session_state.update({
-                        'conectado': True, 
-                        'user': u_in, 
-                        'nombre': row.iloc[0]['Nombre'], 
-                        'rol': row.iloc[0]['Rol']
-                    })
-                    st.rerun()
-                else: st.error("❌ Contraseña incorrecta")
-            else: st.error("❌ El usuario no existe")
+            if not row.empty and (p_in == str(row.iloc[0]['Clave']).strip()):
+                st.session_state.update({
+                    'conectado': True, 
+                    'user': u_in, 
+                    'nombre': row.iloc[0]['Nombre'], 
+                    'rol': row.iloc[0]['Rol']
+                })
+                st.rerun()
+            else:
+                st.error("❌ Credenciales incorrectas")
 
 # --- 5. PANEL PRINCIPAL ---
 else:
-    df_inv = cargar_datos("Inventario"); df_mov = cargar_datos("Movimientos")
-    df_u = cargar_datos("Usuarios"); df_mant = cargar_datos("Mantenimiento")
-    df_lug = cargar_datos("Lugares"); df_papelera = cargar_datos("Papelera")
+    df_inv = cargar_datos("Inventario")
+    df_mov = cargar_datos("Movimientos")
+    df_u = cargar_datos("Usuarios")
+    df_mant = cargar_datos("Mantenimiento")
+    df_lug = cargar_datos("Lugares")
+    df_papelera = cargar_datos("Papelera")
 
     with st.sidebar:
         st.title(f"👤 {st.session_state['nombre']}")
         st.info(f"Rol: {st.session_state['rol']}")
-        if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        if st.button("🚪 Cerrar Sesión"):
             st.session_state['conectado'] = False
             st.rerun()
 
@@ -96,7 +85,7 @@ else:
     
     tabs = st.tabs(tabs_n)
 
-    # AQUÍ ESTÁ EL ARREGLO (Argumentos limpios)
+    # --- AQUÍ ESTABA EL ERROR CORREGIDO ---
     with tabs[0]:
         inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     
@@ -104,20 +93,19 @@ else:
         movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
     
     try:
-        current_idx = 2
+        curr = 2
         if es_mando:
-            with tabs[current_idx]:
+            with tabs[curr]:
                 mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
-            current_idx += 1
-            with tabs[current_idx]:
+            curr += 1
+            with tabs[curr]:
                 empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera)
-            current_idx += 1
-            
+            curr += 1
         if es_admin:
-            with tabs[current_idx]:
+            with tabs[curr]:
                 usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
-            current_idx += 1
-            with tabs[current_idx]:
+            curr += 1
+            with tabs[curr]:
                 historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
     except:
         pass
