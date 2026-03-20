@@ -4,7 +4,7 @@ import pandas as pd
 def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Personal y Control de Acceso")
 
-    # --- 1. BARRA DE ESTADO DE LICENCIAS ---
+    # --- 1. BARRA DE LICENCIAS ---
     try:
         df_conf = pd.read_excel("database.xlsx", sheet_name="Configuracion")
         limite = int(df_conf.loc[df_conf['Parametro'] == 'Limite_Usuarios', 'Valor'].values[0])
@@ -18,7 +18,6 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.divider()
 
     # --- 2. REGISTRO DE PERSONAL ---
-    st.subheader("➕ Registro de Nuevo Personal")
     tab_ofi, tab_obr = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
     
     with tab_ofi:
@@ -51,44 +50,48 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (AJUSTADO PARA QUE APAREZCA SÍ O SÍ) ---
-    # Usamos .lower() para que no importe si es 'Desarrollador' o 'desarrollador'
+    # --- 3. PANEL DE CONTROL (BOTONES GIGANTES UNO AL LADO DEL OTRO) ---
     mi_rol = str(st.session_state.get('rol', '')).lower().strip()
     
     if "desarrollador" in mi_rol:
         st.subheader("🛠️ Panel de Control de Acceso (Solo Desarrollador)")
         
-        # Filtramos para no borrarte a ti mismo (usuario 'jordan')
+        # Excluimos a 'jordan' para que no te borres tú mismo
         u_gest = df_u[df_u['Usuario'] != 'jordan']
         
         if not u_gest.empty:
-            col_sel, col_bt1, col_bt2 = st.columns([2, 1, 1])
+            # Dividimos en 3 columnas iguales
+            c1, c2, c3 = st.columns(3)
             
-            with col_sel:
-                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist(), key="sel_gest")
+            with c1:
+                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist(), key="sel_admin")
                 idx = df_u[df_u['Usuario'] == u_sel].index[0]
                 est_act = df_u.at[idx, 'Estado_Licencia']
-                st.write(f"Estado: **{est_act}**")
+                st.write(f"Estado actual: **{est_act}**")
 
-            with col_bt1:
-                # BOTÓN DE DESHABILITAR
-                txt_btn = "🚫 Deshabilitar" if est_act == "Activo" else "✅ Habilitar"
-                if st.button(txt_btn, use_container_width=True):
+            with c2:
+                # BOTÓN DESHABILITAR
+                st.write("¿Cambiar acceso?")
+                txt_bt = "✅ Habilitar" if est_act == "Inactivo" else "🚫 Deshabilitar"
+                if st.button(txt_bt, use_container_width=True):
                     df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est_act == "Activo" else "Activo"
                     guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
                     st.rerun()
-            
-            with col_bt2:
-                # BOTÓN DE ELIMINAR (DIRECTO CON CONFIRMACIÓN)
-                with st.popover("🗑️ Eliminar"):
-                    st.warning(f"¿Borrar a {u_sel}?")
-                    if st.button("Confirmar Eliminación", type="primary"):
+
+            with c3:
+                # BOTÓN ELIMINAR DIRECTO
+                st.write("¿Borrar para siempre?")
+                confirma_borrar = st.checkbox("Confirmar eliminación", key="chk_borrar")
+                if st.button("🗑️ Eliminar Usuario", type="primary", use_container_width=True):
+                    if confirma_borrar:
                         df_u = df_u[df_u['Usuario'] != u_sel]
                         guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                        st.success("Eliminado")
+                        st.success(f"Usuario {u_sel} eliminado")
                         st.rerun()
+                    else:
+                        st.warning("Marca la casilla para eliminar")
         else:
-            st.info("No hay otros usuarios para gestionar.")
+            st.info("No hay otros usuarios registrados.")
         
         st.divider()
 
