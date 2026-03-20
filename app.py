@@ -5,36 +5,31 @@ from modulos import seguridad, inventario, movimientos, mantenimiento, empresas,
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
 
-# --- 2. DISEÑO ADAPTATIVO FORZADO (MODO OSCURO) ---
+# --- 2. DISEÑO ADAPTATIVO (SIN FORZAR COLORES DE FONDO) ---
 def aplicar_diseno_jordan():
     st.markdown("""
         <style>
-        /* Fondo general y textos */
-        .stApp { background-color: #0E1117; color: #FFFFFF; }
-        
-        /* Títulos */
+        /* Títulos que siempre se vean bien */
         h1, h2, h3 { color: #0078D4 !important; font-weight: 800; }
         
-        /* Botones */
+        /* Estilo de botones para que resalten en cualquier tema */
         .stButton>button { 
             border-radius: 10px; 
             width: 100%; 
-            background-color: #1E1E1E; 
-            color: white; 
+            transition: 0.3s;
+            font-weight: bold;
             border: 1px solid #0078D4;
         }
-        .stButton>button:hover { background-color: #0078D4 !important; }
         
-        /* Sidebar */
-        [data-testid="stSidebar"] { background-color: #161B22 !important; border-right: 1px solid #30363D; }
-        
-        /* Tablas (Para que no se vean blancas o grises feos) */
-        .stDataFrame { border: 1px solid #30363D; border-radius: 10px; background-color: #0E1117; }
-        
-        /* Inputs y Selectbox */
-        .stTextInput>div>div>input, .stSelectbox>div>div>div {
-            background-color: #161B22 !important;
-            color: white !important;
+        /* Mejorar la visualización de las tablas para que no se vean 'pegadas' */
+        .stDataFrame { 
+            border-radius: 10px; 
+            padding: 5px;
+        }
+
+        /* Ajuste para los Tabs (Pestañas) */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -122,6 +117,7 @@ else:
 
     with tabs[0]: inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     with tabs[1]: movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
+    
     try:
         if es_mando_medio:
             with tabs[2]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
