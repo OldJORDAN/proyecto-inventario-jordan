@@ -59,15 +59,21 @@ if not st.session_state['conectado']:
         if not df_u.empty:
             user_row = df_u[df_u['Usuario'].astype(str) == u]
             if not user_row.empty:
-                if verificar_clave(p, str(user_row.iloc[0]['Clave'])):
-                    st.session_state.update({'conectado': True, 'user': u, 'nombre': user_row.iloc[0]['Nombre'], 'rol': user_row.iloc[0]['Rol'], 'intentos': 0})
+                # Usamos str() para que si la clave en Excel es un número, no explote
+                clave_almacenada = str(user_row.iloc[0]['Clave'])
+                
+                if verificar_clave(p, clave_almacenada):
+                    st.session_state.update({
+                        'conectado': True, 
+                        'user': u, 
+                        'nombre': user_row.iloc[0]['Nombre'],
+                        'rol': user_row.iloc[0]['Rol'],
+                        'intentos': 0
+                    })
                     st.rerun()
                 else: 
                     st.session_state['intentos'] += 1
-                    st.error(f"❌ Clave incorrecta. Intento {st.session_state['intentos']}/3")
-            else: 
-                st.session_state['intentos'] += 1
-                st.error(f"❌ Usuario no encontrado. Intento {st.session_state['intentos']}/3")
+                    st.error(f"❌ Contraseña incorrecta. Intento {st.session_state['intentos']}/3")
         st.rerun() # Forzar que Streamlit lea el nuevo número de intentos
 
 else:
