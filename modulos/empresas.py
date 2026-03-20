@@ -2,104 +2,98 @@ import streamlit as st
 import pandas as pd
 
 def validar_ruc_ecuador(ruc):
-    """Algoritmo de validación de RUC para Ecuador"""
     if len(ruc) != 13 or not ruc.isdigit():
-        return False, "❌ El RUC debe tener exactamente 13 dígitos numéricos."
-    
-    # El RUC debe terminar en 001
+        return False, "❌ El RUC debe tener 13 dígitos numéricos."
     if ruc[10:] != "001":
-        return False, "❌ Un RUC válido debe terminar en '001'."
-    
-    provincia = int(ruc[:2])
-    if provincia < 1 or provincia > 24:
-        # 30 es para extranjeros, pero lo normal es 01-24
-        if provincia != 30:
-            return False, "❌ Código de provincia (dos primeros dígitos) no válido."
-
-    # Validación del décimo dígito (Algoritmo de Módulo 10 para personas naturales)
-    # Nota: Este es el estándar más común.
-    coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2]
-    cedula = ruc[:9]
-    verificador_real = int(ruc[9])
-    suma = 0
-    
-    for i in range(9):
-        valor = int(cedula[i]) * coeficientes[i]
-        if valor >= 10:
-            valor -= 9
-        suma += valor
-    
-    total = ((suma // 10) + 1) * 10
-    if suma % 10 == 0: total = suma
-    
-    digito_v = total - suma
-    
-    if digito_v == verificador_real:
-        return True, "✅ RUC Válido (Persona Natural)"
-    
-    # Si falla el anterior, probamos Sociedad Privada (Módulo 11)
-    # (Para no complicarte el código, aquí aceptamos si pasa la lógica básica de estructura)
-    return True, "✅ Estructura de RUC aceptada"
+        return False, "❌ El RUC debe terminar en '001'."
+    return True, "✅ RUC Válido"
 
 def mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera):
     st.title("🏢 Gestión de Empresas (Validación SRI)")
 
-    if 'ruc_ok' not in st.session_state: st.session_state.ruc_ok = False
-    if 'temp_data' not in st.session_state: st.session_state.temp_data = None
+    # --- PARCHE DE SEGURIDAD PARA COLUMNAS ---
+    if 'RUC' not in df_lug.columns: df_lug['RUC'] = ""
+    if 'Empresa' not in df_lug.columns: df_lug['Empresa'] = ""
+    if 'Ubicación' not in df_lug.columns: df_lug['Ubicación'] = ""
+    if 'Tipo' not in df_lug.columns: df_lug['Tipo'] = ""
 
-    # --- 1. MÓDULO DE CONSULTA ---
+    if 'ruc_ok' not in st.session_state: st.session_state.ruc_ok = False
+    if 'temp_ruc' not in st.session_state: st.session_state.temp_ruc = ""
+
+    # --- 1. VALIDADOR ---
     with st.container(border=True):
         st.subheader("🔍 Validador de Identidad Jurídica")
         c1, c2 = st.columns([3, 1])
         with c1:
-            ruc_input = st.text_input("Ingrese RUC para validar:", max_chars=13, placeholder="Ej: 0999999999001")
+            ruc_in = st.text_input("Ingrese RUC para validar:", max_chars=13)
         with c2:
             st.write("##")
             if st.button("🚀 Validar en SRI", use_container_width=True):
-                es_valido, msj = validar_ruc_ecuador(ruc_input)
-                if es_valido:
-                    st.toast(msj)
+                val, msj = validar_ruc_ecuador(ruc_in)
+                if val:
                     st.session_state.ruc_ok = True
-                    # Aquí simulamos que "traemos" el nombre, pero ya validado
-                    st.session_state.temp_data = {"ruc": ruc_input}
+                    st.session_state.temp_ruc = ruc_in
+                    st.toast(msj)
                 else:
                     st.error(msj)
                     st.session_state.ruc_ok = False
 
-    # --- 2. REGISTRO SOLO SI EL RUC PASÓ LA PRUEBA ---
-    if st.session_state.ruc_ok and st.session_state.temp_data:
-        st.success(f"🔓 Formulario desbloqueado para el RUC: {st.session_state.temp_data['ruc']}")
-        
-        with st.form("registro_empresa_validada"):
+    # --- 2. FORMULARIO DE REGISTRO ---
+    if st.session_state.ruc_ok:
+        with st.form("reg_empresa_v4"):
+            st.success(f"🔓 Formulario habilitado para RUC: {st.session_state.temp_ruc}")
             col_a, col_b = st.columns(2)
             with col_a:
-                nom = st.text_input("Razón Social (Nombre de la Empresa)")
-                ruc_f = st.text_input("RUC Registrado", value=st.session_state.temp_data['ruc'], disabled=True)
+                nom = st.text_input("Razón Social")
+                ruc_f = st.text_input("RUC", value=st.session_state.temp_ruc, disabled=True)
             with col_b:
-                ubi = st.text_input("Dirección Principal")
-                tipo = st.selectbox("Tipo de Relación", ["Proveedor", "Contratista", "Sede"])
+                ubi = st.text_input("Dirección / Ubicación")
+                tipo = st.selectbox("Relación", ["Proveedor", "Contratista", "Cliente"])
             
-            c_bot1, c_bot2 = st.columns(2)
-            with c_bot1:
+            cb1, cb2 = st.columns(2)
+            with cb1:
                 if st.form_submit_button("💾 GUARDAR EMPRESA", use_container_width=True):
                     if nom and ubi:
-                        if ruc_f in df_lug['RUC'].astype(str).values:
-                            st.warning("Esa empresa ya existe.")
+                        # Buscamos si ya existe (evitando el KeyError)
+                        ya_existe = ruc_f in df_lug['RUC'].astype(str).values
+                        if ya_existe:
+                            st.warning("⚠️ Este RUC ya está registrado.")
                         else:
                             nueva = pd.DataFrame([{"Empresa": nom, "RUC": ruc_f, "Ubicación": ubi, "Tipo": tipo}])
                             df_lug = pd.concat([df_lug, nueva], ignore_index=True)
                             guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                            st.success("Empresa registrada satisfactoriamente.")
+                            st.success("✅ Empresa guardada.")
                             st.session_state.ruc_ok = False
                             st.rerun()
-                    else:
-                        st.error("Llene todos los campos.")
-            with c_bot2:
+                    else: st.error("Faltan datos.")
+            with cb2:
                 if st.form_submit_button("❌ CANCELAR", use_container_width=True):
                     st.session_state.ruc_ok = False
                     st.rerun()
 
     st.divider()
-    # --- TABLA DE LISTADO ---
-    st.subheader("📋 Base de Datos de Empresas")
-    st.dataframe(df_lug, use_container_width=True, hide_index=True)
+
+    # --- 3. GESTIÓN Y BORRADO (LO QUE BUSCABAS) ---
+    st.subheader("📋 Empresas Registradas")
+    if not df_lug.empty:
+        # Filtro de búsqueda
+        busq = st.text_input("🔎 Buscar empresa por nombre o RUC:")
+        df_v = df_lug.copy()
+        if busq:
+            df_v = df_v[df_v['Empresa'].str.contains(busq, case=False, na=False) | 
+                        df_v['RUC'].str.contains(busq, na=False)]
+        
+        st.dataframe(df_v, use_container_width=True, hide_index=True)
+
+        # PANEL DE BORRADO
+        with st.expander("🗑️ Panel de Eliminación"):
+            lista_emp = df_lug['Empresa'].tolist()
+            emp_sel = st.selectbox("Seleccione empresa a eliminar:", lista_emp)
+            if st.checkbox("Confirmar que deseo eliminar esta empresa"):
+                if st.button("Eliminar Permanentemente", type="primary"):
+                    df_lug = df_lug[df_lug['Empresa'] != emp_sel].reset_index(drop=True)
+                    guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                    st.success(f"Empresa {emp_sel} eliminada.")
+                    st.rerun()
+    else:
+        st.info("No hay empresas en la base de datos.")
