@@ -28,7 +28,7 @@ def cargar_datos(pestaña):
     except:
         return pd.DataFrame()
 
-# --- 3. FUNCIÓN DE GUARDADO (LA QUE DABA EL ERROR) ---
+# --- 3. FUNCIÓN DE GUARDADO ---
 def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
     try:
         with pd.ExcelWriter("database.xlsx", engine="openpyxl") as writer:
@@ -62,21 +62,38 @@ if not st.session_state['conectado']:
                     match = (p_in == hash_excel)
                 
                 if match:
-                    st.session_state.update({'conectado': True, 'user': u_in, 'nombre': row.iloc[0]['Nombre'], 'rol': row.iloc[0]['Rol']})
+                    # GUARDAMOS LOS DATOS EN LA SESIÓN
+                    st.session_state.update({
+                        'conectado': True, 
+                        'user': u_in, 
+                        'nombre': row.iloc[0]['Nombre'], 
+                        'rol': row.iloc[0]['Rol']
+                    })
                     st.rerun()
                 else: st.error("❌ Contraseña incorrecta")
             else: st.error("❌ Usuario no encontrado")
 
-# --- 5. PANEL PRINCIPAL (CORRECCIÓN DE 'NONE') ---
+# --- 5. PANEL PRINCIPAL ---
 else:
     df_inv = cargar_datos("Inventario"); df_mov = cargar_datos("Movimientos")
     df_u = cargar_datos("Usuarios"); df_mant = cargar_datos("Mantenimiento")
     df_lug = cargar_datos("Lugares"); df_papelera = cargar_datos("Papelera")
 
-    st.sidebar.title(f"👤 {st.session_state['nombre']}")
-    if st.sidebar.button("Cerrar Sesión"):
-        st.session_state['conectado'] = False
-        st.rerun()
+    # --- SIDEBAR MEJORADO (LO QUE PEDISTE) ---
+    with st.sidebar:
+        st.title(f"👤 {st.session_state['nombre']}")
+        # Aquí forzamos que salga el rol con un diseño que resalte
+        st.markdown(f"""
+            <div style="background-color: #1E1E1E; padding: 10px; border-radius: 5px; border-left: 5px solid #0078D4;">
+                <p style="margin: 0; color: #888; font-size: 0.8em;">Rol de Usuario:</p>
+                <p style="margin: 0; color: #0078D4; font-weight: bold; font-size: 1.1em;">{st.session_state['rol']}</p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("---")
+        if st.button("🚪 Cerrar Sesión"):
+            st.session_state['conectado'] = False
+            st.rerun()
 
     rol = st.session_state['rol']
     es_admin = any(x in rol for x in ["Desarrollador", "Administrador"])
@@ -88,7 +105,6 @@ else:
 
     tabs = st.tabs(lista_tabs)
     
-    # --- AQUÍ ESTÁ EL ARREGLO: PASAMOS 'guardar_global' EN LUGAR DE 'None' ---
     with tabs[0]: 
         inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     with tabs[1]: 
@@ -99,7 +115,6 @@ else:
             with tabs[2]: mantenimiento.mostrar(df_mant, df_inv, guardar_global, df_mov, df_u, df_lug, df_papelera)
             with tabs[3]: empresas.mostrar(df_lug, guardar_global, df_inv, df_mov, df_u, df_mant, df_papelera)
         if es_admin:
-            # Línea 112 corregida: pasamos guardar_global
             with tabs[4]: usuarios.mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera)
             with tabs[5]: historial.mostrar(df_mov, guardar_global, df_inv, df_u, df_mant, df_lug, df_papelera)
     except IndexError:
