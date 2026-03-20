@@ -5,15 +5,16 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Personal y Control de Licencias")
 
     # --- 1. BARRA DE LICENCIAS ---
-    # Limpiamos espacios para evitar errores de conteo
+    # Limpieza de seguridad para que no cuente espacios vacíos
     df_u['Usuario'] = df_u['Usuario'].astype(str).str.strip()
-    df_reales = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)]
+    df_reales = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
     
-    st.write(f"**Uso de Licencias:** {len(df_reales)} de 50")
-    st.progress(min(len(df_reales) / 50, 1.0))
+    u_cont = len(df_reales)
+    st.write(f"**Uso de Licencias:** {u_cont} de 50")
+    st.progress(min(u_cont / 50, 1.0))
     st.divider()
 
-    # --- 2. REGISTRO (CON VALIDACIÓN DE DUPLICADOS) ---
+    # --- 2. REGISTRO DE PERSONAL ---
     t1, t2 = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
     
     with t1:
@@ -50,24 +51,27 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL (CON PARCHE DE BORRADO) ---
+    # --- 3. PANEL DE CONTROL (CON SALVAVIDAS) ---
     st.subheader("🛠️ Panel de Control")
+    
+    # SALVAVIDAS: Solo mostramos el panel si hay alguien a quien gestionar
     if not df_reales.empty:
         c1, c2, c3 = st.columns([2, 1, 1])
         with c1:
-            # Lista limpia de usuarios para el selector
             lista_us = df_reales['Usuario'].tolist()
             u_sel = st.selectbox("Usuario para gestionar:", lista_us)
-            # Buscamos el índice original
-            idx_list = df_u[df_u['Usuario'] == u_sel].index.tolist()
-            if idx_list:
-                idx = idx_list[0]
+            
+            # Verificación extra para no romper el código
+            user_match = df_u[df_u['Usuario'] == u_sel]
+            if not user_match.empty:
+                idx = user_match.index[0]
                 est = df_u.at[idx, 'Estado_Licencia']
+                st.write(f"Estado: **{est}**")
             else:
-                st.rerun() # Si no lo encuentra, refresca para evitar el error
+                st.rerun()
         
         with c2:
-            st.write(f"Estado: **{est}**")
+            st.write("Acceso")
             if st.button("🚫 Deshabilitar" if est=="Activo" else "✅ Habilitar", use_container_width=True):
                 df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est=="Activo" else "Activo"
                 guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
@@ -75,20 +79,21 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
         with c3:
             st.write("Zona de Peligro")
-            if st.checkbox("Confirmar borrar", key="check_safe_del"):
+            if st.checkbox("Confirmar borrar", key="safe_del_check"):
                 if st.button("🗑️ Eliminar", type="primary", use_container_width=True):
-                    # ⚡ PARCHE: Borramos, reseteamos índice y guardamos
                     df_u = df_u.drop(idx).reset_index(drop=True)
                     guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
                     st.rerun()
+    else:
+        st.info("💡 No hay personal registrado para gestionar. Registra a alguien arriba.")
 
     st.divider()
 
-    # --- 4. TABLA DE PERSONAL (VISTA SEGURA) ---
+    # --- 4. TABLA DE PERSONAL (SIEMPRE VISIBLE) ---
     st.subheader("📋 Personal Registrado")
     f_v = st.radio("Mostrar:", ["Todos", "Oficina", "Obra"], horizontal=True)
     
-    # Recalculamos df_vista para que se actualice tras el borrado
+    # Volvemos a filtrar para la tabla por si hubo cambios
     df_v = df_u[~df_u['Usuario'].str.contains('jordan', case=False, na=False)].copy()
     
     if f_v == "Oficina": df_v = df_v[df_v['Tipo_Personal'] == 'Oficina']
@@ -104,4 +109,4 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
             use_container_width=True
         )
     else:
-        st.info("No hay personal registrado en esta categoría.")
+        st.warning("⚠️ No se encontraron registros para mostrar.")
