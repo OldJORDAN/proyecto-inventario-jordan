@@ -44,14 +44,14 @@ def cargar_datos(pestaña):
         df = pd.read_excel("database.xlsx", sheet_name=pestaña)
         return df
     except Exception as e:
-        # Definición de columnas por defecto si la hoja no existe
         columnas = {
             "Usuarios": ["Nombre", "Usuario", "Clave", "Rol", "Area"],
             "Papelera": ["Fecha_Eliminacion", "Admin_Que_Borro", "ID_Original", "Herramienta", "Marca", "Motivo"],
             "Inventario": ["ID", "Herramienta", "Marca", "Stock", "Lugar"],
             "Movimientos": ["Id_Historial", "Fecha", "Usuario_Admin", "ID", "Herramienta", "Marca", "Operario_Receptor", "Lugar", "Accion", "Cantidad"],
             "Mantenimiento": ["ID", "Herramienta", "Tipo de Mantenimiento", "Fecha de Ingreso", "Días Estimados", "Técnico Responsable", "Estado"],
-            "Lugares": ["Empresa", "Ubicacion", "Responsable"]
+            "Lugares": ["Empresa", "Ubicacion", "Responsable"],
+            "Configuracion": ["Parametro", "Valor"]
         }
         return pd.DataFrame(columns=columnas.get(pestaña, []))
 
@@ -64,38 +64,49 @@ def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
         df_lug.to_excel(writer, sheet_name="Lugares", index=False)
         df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
 
-# --- 4. SISTEMA DE SESIÓN ---
+# --- 4. SISTEMA DE SESIÓN Y SEGURIDAD ---
 if 'conectado' not in st.session_state:
     st.session_state['conectado'] = False
 if 'rol' not in st.session_state:
     st.session_state['rol'] = None
+if 'intentos' not in st.session_state:
+    st.session_state['intentos'] = 0
 
 aplicar_diseno_jordan()
 
 if not st.session_state['conectado']:
     st.title("🔐 Acceso Jordan Admin Pro")
-    u = st.text_input("Usuario")
-    p = st.text_input("Contraseña", type="password")
     
-    if st.button("Ingresar Sistema"):
-        df_u = cargar_datos("Usuarios")
-        if not df_u.empty:
-            user_row = df_u[df_u['Usuario'].astype(str) == u]
-            if not user_row.empty:
-                if verificar_clave(p, str(user_row.iloc[0]['Clave'])):
-                    st.session_state.update({
-                        'conectado': True, 
-                        'user': u, 
-                        'nombre': user_row.iloc[0]['Nombre'],
-                        'rol': user_row.iloc[0]['Rol']
-                    })
-                    st.rerun()
-                else: st.error("❌ Contraseña incorrecta")
-            else: st.error("❌ Usuario no encontrado")
-
-#    if st.button("🚀 Modo Desarrollador"):
-#        st.session_state.update({'conectado': True, 'user': 'Jordan_Admin', 'nombre': 'Jordan (Dev)', 'rol': 'Desarrollador'})
-#        st.rerun()
+    # --- CAPA DE BLOQUEO POR INTENTOS ---
+    if st.session_state['intentos'] >= 3:
+        st.error("🚫 **ACCESO BLOQUEADO:** Has fallado 3 veces. El sistema se ha cerrado por seguridad. Contacta a Jordan Damian.")
+    else:
+        u_input = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
+        
+        if st.button("Ingresar Sistema"):
+            # ANTI-HACKER: Limpieza de caracteres raros
+            u = "".join(e for e in u_input if e.isalnum())
+            
+            df_u = cargar_datos("Usuarios")
+            if not df_u.empty:
+                user_row = df_u[df_u['Usuario'].astype(str) == u]
+                if not user_row.empty:
+                    if verificar_clave(p, str(user_row.iloc[0]['Clave'])):
+                        st.session_state.update({
+                            'conectado': True, 
+                            'user': u, 
+                            'nombre': user_row.iloc[0]['Nombre'],
+                            'rol': user_row.iloc[0]['Rol'],
+                            'intentos': 0 # Reset al entrar
+                        })
+                        st.rerun()
+                    else: 
+                        st.session_state['intentos'] += 1
+                        st.error(f"❌ Contraseña incorrecta. Intento {st.session_state['intentos']}/3")
+                else: 
+                    st.session_state['intentos'] += 1
+                    st.error(f"❌ Usuario no encontrado. Intento {st.session_state['intentos']}/3")
 
 else:
     # Carga de datos
@@ -109,6 +120,17 @@ else:
     # Sidebar
     st.sidebar.title(f"👤 {st.session_state['nombre']}")
     st.sidebar.write(f"Rol: {st.session_state['rol']}")
+    
+    # --- MOSTRAR ESTADO DE LICENCIAS EN EL SIDEBAR ---
+    try:
+        df_conf = cargar_datos("Configuracion")
+        limite = int(df_conf.loc[df_conf['Parametro'] == 'Limite_Usuarios', 'Valor'].values[0])
+        st.sidebar.divider()
+        st.sidebar.caption(f"📊 Licencias: {len(df_u)} / {limite}")
+        st.sidebar.progress(min(len(df_u)/limite, 1.0))
+    except:
+        pass
+
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state['conectado'] = False
         st.rerun()
@@ -121,7 +143,7 @@ else:
     
     tabs = st.tabs(lista_tabs)
 
-    # --- LLAMADA A MÓDULOS CON PASO DE VARIABLES ---
+    # --- LLAMADA A MÓDULOS ---
     with tabs[0]: 
         inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     
