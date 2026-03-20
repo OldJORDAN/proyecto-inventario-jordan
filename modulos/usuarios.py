@@ -4,7 +4,7 @@ import pandas as pd
 def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     st.title("👥 Gestión de Usuarios y Licencias")
 
-    # --- 1. LÍMITE DE LICENCIAS ---
+    # --- 1. LÍMITE DE LICENCIAS (Sigue igual) ---
     try:
         df_conf = pd.read_excel("database.xlsx", sheet_name="Configuracion")
         limite = int(df_conf.loc[df_conf['Parametro'] == 'Limite_Usuarios', 'Valor'].values[0])
@@ -21,59 +21,67 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
     with col_t:
         st.write(f"**{usuarios_actuales} / {limite}**")
 
-    # --- 3. SECCIÓN PARA AGREGAR Y ELIMINAR ---
-    col_add, col_del = st.columns(2)
+    # --- 3. SECCIÓN DE REGISTRO (OFICINA / OBRA) Y ELIMINACIÓN ---
+    col_reg, col_del = st.columns(2)
 
-    with col_add:
-        with st.expander("➕ Registrar Nuevo Usuario"):
+    with col_reg:
+        with st.expander("➕ Registrar Nuevo Personal"):
             if usuarios_actuales >= limite:
-                st.error("🚫 Límite alcanzado. No puedes agregar más.")
+                st.error("🚫 Límite alcanzado.")
             else:
                 with st.form("nuevo_u"):
-                    n = st.text_input("Nombre Completo")
-                    u = st.text_input("ID Usuario").lower().strip()
+                    n = st.text_input("Nombre y Apellido")
+                    u = st.text_input("ID de Acceso").lower().strip()
                     c = st.text_input("Clave", type="password")
-                    r = st.selectbox("Rol", ["Operador", "Supervisor", "Administrador"])
+                    r = st.selectbox("Rol", ["Operador", "Supervisor", "Administrador", "Maestro de Obra"])
+                    # --- AQUÍ ESTÁ TU DIVISIÓN DE ÁREAS ---
+                    a = st.selectbox("Área de Trabajo", ["Oficina", "Obra", "Logística", "Externo"])
                     
                     if st.form_submit_button("Guardar Registro"):
                         if n and u and c:
                             if u in df_u['Usuario'].astype(str).values:
-                                st.error("Ese ID de usuario ya existe.")
+                                st.error("Este usuario ya existe.")
                             else:
-                                nuevo = {"Nombre": n, "Usuario": u, "Clave": c, "Rol": r, "Area": "General"}
+                                # Respetamos todas tus columnas originales
+                                nuevo = {"Nombre": n, "Usuario": u, "Clave": c, "Rol": r, "Area": a}
                                 df_u = pd.concat([df_u, pd.DataFrame([nuevo])], ignore_index=True)
                                 guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                                st.success(f"Usuario {u} creado.")
+                                st.success(f"¡{n} registrado en {a}!")
                                 st.rerun()
                         else:
-                            st.warning("Llena todos los campos.")
+                            st.warning("Completa todos los datos.")
 
     with col_del:
-        with st.expander("🗑️ Eliminar Usuario"):
-            # No permitimos que te borres a ti mismo (Jordan Master)
-            usuarios_borrables = df_u[df_u['Usuario'] != 'jordan']['Usuario'].tolist()
+        with st.expander("🗑️ Eliminar Personal"):
+            # Filtramos para que no te borres tú mismo
+            lista_usuarios = df_u[df_u['Usuario'] != 'jordan']['Usuario'].tolist()
             
-            if not usuarios_borrables:
-                st.info("No hay otros usuarios para eliminar.")
+            if not lista_usuarios:
+                st.info("No hay otros usuarios para gestionar.")
             else:
-                u_para_borrar = st.selectbox("Seleccione usuario a eliminar:", usuarios_borrables)
-                confirmar = st.checkbox(f"Confirmo que quiero eliminar a {u_para_borrar}")
+                u_sel = st.selectbox("Usuario a eliminar:", lista_usuarios)
+                seguro = st.checkbox(f"Confirmar eliminación de {u_sel}")
                 
-                if st.button("❌ Ejecutar Eliminación"):
-                    if confirmar:
-                        df_u = df_u[df_u['Usuario'] != u_para_borrar]
+                if st.button("❌ Eliminar Permanentemente"):
+                    if seguro:
+                        df_u = df_u[df_u['Usuario'] != u_sel]
                         guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                        st.success(f"Usuario {u_para_borrar} eliminado correctamente.")
+                        st.success(f"Usuario {u_sel} eliminado.")
                         st.rerun()
                     else:
-                        st.warning("Debes marcar la casilla de confirmación.")
+                        st.warning("Marca la casilla de confirmación.")
 
     st.divider()
     
-    # --- 4. TABLA DE CONTROL ---
-    st.subheader("📋 Lista de Personal")
-    # Mostramos la clave solo si eres Jordan Master para que puedas recuperarlas
-    if st.toggle("Mostrar credenciales"):
-        st.dataframe(df_u[['Nombre', 'Usuario', 'Clave', 'Rol']], use_container_width=True)
+    # --- 4. TABLA DE CONTROL CON TUS COLUMNAS ---
+    st.subheader("📋 Lista de Personal Registrado")
+    
+    # Selector para ver por área
+    filtro_area = st.multiselect("Filtrar por Área:", ["Oficina", "Obra", "Logística", "Externo"], default=["Oficina", "Obra"])
+    
+    df_filtrado = df_u[df_u['Area'].isin(filtro_area)] if filtro_area else df_u
+
+    if st.toggle("Ver Claves (Modo Admin)"):
+        st.dataframe(df_filtrado[['Nombre', 'Usuario', 'Clave', 'Rol', 'Area']], use_container_width=True)
     else:
-        st.dataframe(df_u[['Nombre', 'Usuario', 'Rol']], use_container_width=True)
+        st.dataframe(df_filtrado[['Nombre', 'Usuario', 'Rol', 'Area']], use_container_width=True)
