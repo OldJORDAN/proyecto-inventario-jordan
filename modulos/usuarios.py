@@ -9,7 +9,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
         df_conf = pd.read_excel("database.xlsx", sheet_name="Configuracion")
         limite = int(df_conf.loc[df_conf['Parametro'] == 'Limite_Usuarios', 'Valor'].values[0])
     except:
-        limite = 50 # Valor por defecto
+        limite = 50
 
     usuarios_actuales = len(df_u)
     st.write(f"**Uso de Licencias:** {usuarios_actuales} de {limite}")
@@ -17,7 +17,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
 
     st.divider()
 
-    # --- 2. REGISTRO DE PERSONAL (OFICINA / OBRA) ---
+    # --- 2. REGISTRO DE PERSONAL ---
     st.subheader("➕ Registro de Nuevo Personal")
     tab_ofi, tab_obr = st.tabs(["🏢 Oficina", "👨‍🏭 Taller / Obra"])
     
@@ -32,7 +32,7 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                     nuevo = pd.DataFrame([{"Nombre": n, "Usuario": u, "Clave": c, "Rol": r, "Tipo_Personal": "Oficina", "Estado_Licencia": "Activo", "Display": f"{n} ({r})"}])
                     df_u = pd.concat([df_u, nuevo], ignore_index=True)
                     guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                    st.success("✅ Registrado en Oficina")
+                    st.success("✅ Registrado")
                     st.rerun()
 
     with tab_obr:
@@ -46,55 +46,49 @@ def mostrar(df_u, guardar_global, df_inv, df_mov, df_mant, df_lug, df_papelera):
                     nuevo = pd.DataFrame([{"Nombre": n, "Usuario": u, "Clave": c, "Rol": r, "Tipo_Personal": "Obra", "Estado_Licencia": "Activo", "Display": f"{n} ({r})"}])
                     df_u = pd.concat([df_u, nuevo], ignore_index=True)
                     guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                    st.success("✅ Registrado en Taller")
+                    st.success("✅ Registrado")
                     st.rerun()
 
     st.divider()
 
-    # --- 3. PANEL DE CONTROL TOTAL (SOLO PARA DESARROLLADOR) ---
-    if st.session_state['rol'] == "Desarrollador":
+    # --- 3. PANEL DE CONTROL (AJUSTADO PARA QUE APAREZCA SÍ O SÍ) ---
+    # Usamos .lower() para que no importe si es 'Desarrollador' o 'desarrollador'
+    mi_rol = str(st.session_state.get('rol', '')).lower().strip()
+    
+    if "desarrollador" in mi_rol:
         st.subheader("🛠️ Panel de Control de Acceso (Solo Desarrollador)")
         
-        # Lista de usuarios excluyéndote a ti
+        # Filtramos para no borrarte a ti mismo (usuario 'jordan')
         u_gest = df_u[df_u['Usuario'] != 'jordan']
         
         if not u_gest.empty:
-            col_sel, col_acc = st.columns([2, 2])
+            col_sel, col_bt1, col_bt2 = st.columns([2, 1, 1])
             
             with col_sel:
-                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist())
-                # Obtener datos actuales
+                u_sel = st.selectbox("Seleccione Usuario:", u_gest['Usuario'].tolist(), key="sel_gest")
                 idx = df_u[df_u['Usuario'] == u_sel].index[0]
-                estado_act = df_u.at[idx, 'Estado_Licencia']
-                nombre_act = df_u.at[idx, 'Nombre']
-                
-                st.write(f"Estado Actual: **{estado_act}**")
+                est_act = df_u.at[idx, 'Estado_Licencia']
+                st.write(f"Estado: **{est_act}**")
 
-            with col_acc:
-                st.write("**Acciones Disponibles:**")
-                # Botón 1: Deshabilitar/Habilitar
-                txt_des = "🚫 Deshabilitar Licencia" if estado_act == "Activo" else "✅ Habilitar Licencia"
-                if st.button(txt_des, use_container_width=True):
-                    df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if estado_act == "Activo" else "Activo"
+            with col_bt1:
+                # BOTÓN DE DESHABILITAR
+                txt_btn = "🚫 Deshabilitar" if est_act == "Activo" else "✅ Habilitar"
+                if st.button(txt_btn, use_container_width=True):
+                    df_u.at[idx, 'Estado_Licencia'] = "Inactivo" if est_act == "Activo" else "Activo"
                     guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                    st.toast(f"Licencia de {u_sel} actualizada.")
                     st.rerun()
-                
-                # Botón 2: Eliminar (¡NUEVO!)
-                st.write("---")
-                with st.expander("🗑️ Zona de Peligro: Eliminar Usuario"):
-                    st.warning(f"¿Está seguro de borrar permanentemente a **{nombre_act}**?")
-                    check_seguro = st.checkbox(f"Sí, soy Jordan y quiero borrar a {u_sel}")
-                    if st.button("❌ Eliminar Permanentemente", type="primary", use_container_width=True):
-                        if check_seguro:
-                            df_u = df_u[df_u['Usuario'] != u_sel]
-                            guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
-                            st.success(f"Usuario {u_sel} eliminado.")
-                            st.rerun()
-                        else:
-                            st.error("Debe confirmar la casilla para eliminar.")
+            
+            with col_bt2:
+                # BOTÓN DE ELIMINAR (DIRECTO CON CONFIRMACIÓN)
+                with st.popover("🗑️ Eliminar"):
+                    st.warning(f"¿Borrar a {u_sel}?")
+                    if st.button("Confirmar Eliminación", type="primary"):
+                        df_u = df_u[df_u['Usuario'] != u_sel]
+                        guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera)
+                        st.success("Eliminado")
+                        st.rerun()
         else:
-            st.info("No hay otros usuarios registrados para gestionar.")
+            st.info("No hay otros usuarios para gestionar.")
         
         st.divider()
 
