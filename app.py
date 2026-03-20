@@ -93,9 +93,9 @@ if not st.session_state['conectado']:
                 else: st.error("❌ Contraseña incorrecta")
             else: st.error("❌ Usuario no encontrado")
 
-    if st.button("🚀 Modo Desarrollador"):
-        st.session_state.update({'conectado': True, 'user': 'Jordan_Admin', 'nombre': 'Jordan (Dev)', 'rol': 'Desarrollador'})
-        st.rerun()
+#    if st.button("🚀 Modo Desarrollador"):
+#        st.session_state.update({'conectado': True, 'user': 'Jordan_Admin', 'nombre': 'Jordan (Dev)', 'rol': 'Desarrollador'})
+#        st.rerun()
 
 else:
     # Carga de datos
