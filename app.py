@@ -8,19 +8,29 @@ from modulos import seguridad, inventario, movimientos, mantenimiento, empresas,
 # 1. CONFIGURACIÓN
 st.set_page_config(page_title="Jordan Admin Pro", layout="wide", page_icon="🛠️")
 
-# --- 2. CARGA DE DATOS ---
+# --- 2. CARGA DE DATOS (CON PARCHE PARA COLUMNAS FALTANTES) ---
 def cargar_datos(pestaña):
     if not os.path.exists("database.xlsx"):
         return pd.DataFrame()
     try:
         df = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
-        df.columns = df.columns.str.strip()
-        for col in df.columns:
-            df[col] = df[col].astype(str).str.strip()
+        df.columns = df.columns.str.strip() # Limpiar nombres de columnas
+        
+        # --- PARCHE ANTICRISIS PARA USUARIOS ---
+        if pestaña == "Usuarios":
+            # Si no existe la columna que dio el error, la creamos vacía
+            if 'Estado_Licencia' not in df.columns:
+                df['Estado_Licencia'] = 'Activo'
+            if 'Usuario' in df.columns:
+                df['Usuario'] = df['Usuario'].astype(str).str.strip().str.lower()
+        
         return df
     except:
         time.sleep(0.5)
-        try: return pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
+        try: 
+            df_reintento = pd.read_excel("database.xlsx", sheet_name=pestaña, dtype=str)
+            df_reintento.columns = df_reintento.columns.str.strip()
+            return df_reintento
         except: return pd.DataFrame()
 
 # --- 3. GUARDADO GLOBAL ---
@@ -34,9 +44,9 @@ def guardar_global(df_inv, df_mov, df_u, df_mant, df_lug, df_papelera):
             df_lug.to_excel(writer, sheet_name="Lugares", index=False)
             df_papelera.to_excel(writer, sheet_name='Papelera', index=False)
         st.sidebar.success("💾 ¡Sincronizado!")
-    except: st.error("❌ Error: Cierra el Excel si está abierto.")
+    except: st.error("❌ Error: Cierra el Excel si lo tienes abierto.")
 
-# --- 4. LÓGICA DE LOGIN (CON ACCESO FORZADO "1") ---
+# --- 4. LÓGICA DE LOGIN (ACTUALIZADA) ---
 if 'conectado' not in st.session_state:
     st.session_state['conectado'] = False
 
@@ -49,22 +59,22 @@ if not st.session_state['conectado']:
         boton_login = st.form_submit_button("🚀 Ingresar", use_container_width=True)
     
     if boton_login:
-        # --- EL "HACK" PARA ENTRAR A LA FUERZA ---
-        if u_in == "1" and p_in == "1":
+        # --- ACCESO MAESTRO SOLICITADO ---
+        if u_in == "jordan" and p_in == "170362":
             st.session_state.update({
                 'conectado': True, 
                 'user': 'jordan', 
                 'nombre': 'JORDAN DAMIAN TITO AYALA', 
                 'rol': 'Desarrollador'
             })
-            st.success("✅ Acceso Maestro Concedido")
+            st.success("✅ Acceso Maestro Jordan Concedido")
             time.sleep(0.5)
             st.rerun()
         
-        # --- LOGIN NORMAL POR EXCEL ---
+        # --- LOGIN POR EXCEL ---
         else:
             df_u_login = cargar_datos("Usuarios")
-            if not df_u_login.empty:
+            if not df_u_login.empty and 'Usuario' in df_u_login.columns:
                 row = df_u_login[df_u_login['Usuario'] == u_in]
                 if not row.empty:
                     clave_excel = str(row.iloc[0]['Clave']).strip()
@@ -78,7 +88,6 @@ if not st.session_state['conectado']:
                         st.rerun()
                     else: st.error("❌ Contraseña incorrecta")
                 else: st.error("❌ Usuario no existe")
-            else: st.error("❌ No hay base de datos de usuarios")
 
 # --- 5. PANEL PRINCIPAL ---
 else:
@@ -88,7 +97,6 @@ else:
 
     with st.sidebar:
         st.title(f"👤 {st.session_state['nombre']}")
-        st.info(f"Rol: {st.session_state['rol']}")
         if st.button("🚪 Cerrar Sesión", use_container_width=True):
             st.session_state['conectado'] = False
             st.rerun()
@@ -103,6 +111,7 @@ else:
     
     tabs = st.tabs(tabs_n)
 
+    # Inyección con el orden corregido de argumentos
     with tabs[0]: inventario.mostrar(df_inv, guardar_global, df_mov, df_u, df_mant, df_lug, df_papelera)
     with tabs[1]: movimientos.mostrar(df_inv, df_mov, df_lug, st.session_state['user'], guardar_global, df_u, df_mant, df_papelera)
     
